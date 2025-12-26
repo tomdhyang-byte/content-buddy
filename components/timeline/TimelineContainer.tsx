@@ -1,0 +1,241 @@
+'use client';
+
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { Segment, SegmentAssets } from '@/types';
+import { LAYOUT_CONSTANTS } from '@/config/constants';
+
+export interface TimelineSegment extends Segment {
+    startTime: number;
+    duration: number;
+    assets: SegmentAssets;
+}
+
+export function calculateTimelineSegments(
+    segments: Segment[],
+    generatedAssets: Map<string, SegmentAssets>
+): TimelineSegment[] {
+    let currentTime = 0;
+
+    return segments.map((segment) => {
+        const assets = generatedAssets.get(segment.id) || {
+            imagePrompt: null,
+            promptStatus: 'idle' as const,
+            imageUrl: null,
+            imageStatus: 'idle' as const,
+            audioUrl: null,
+            audioStatus: 'idle' as const,
+        };
+
+        // Duration based on audio if available, otherwise default
+        const duration = assets.audioDuration || LAYOUT_CONSTANTS.DEFAULT_SEGMENT_DURATION;
+
+        const timelineSegment: TimelineSegment = {
+            ...segment,
+            startTime: currentTime,
+            duration,
+            assets,
+        };
+
+        currentTime += duration;
+        return timelineSegment;
+    });
+}
+
+interface TimelineContainerProps {
+    segments: Segment[];
+    generatedAssets: Map<string, SegmentAssets>;
+    selectedSegmentId: string | null;
+    onSelectSegment: (id: string) => void;
+    isPlaying: boolean;
+    currentPlayTime: number;
+}
+
+export function TimelineContainer({
+    segments,
+    generatedAssets,
+    selectedSegmentId,
+    onSelectSegment,
+    isPlaying,
+    currentPlayTime,
+}: TimelineContainerProps) {
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    // Performance optimization: Memoize timeline calculation
+    const timelineSegments = useMemo(
+        () => calculateTimelineSegments(segments, generatedAssets),
+        [segments, generatedAssets]
+    );
+
+    // Calculate total duration
+    const totalDuration = timelineSegments.reduce((sum, seg) => sum + seg.duration, 0);
+    const totalWidth = totalDuration * LAYOUT_CONSTANTS.PIXELS_PER_SECOND;
+
+    // Auto-scroll to follow playhead
+    useEffect(() => {
+        if (isPlaying && containerRef.current) {
+            const playheadPosition = currentPlayTime * LAYOUT_CONSTANTS.PIXELS_PER_SECOND;
+            const containerWidth = containerRef.current.clientWidth;
+            const scrollLeft = containerRef.current.scrollLeft;
+
+            // Scroll if playhead is near the edge
+            if (playheadPosition > scrollLeft + containerWidth - 100) {
+                containerRef.current.scrollTo({
+                    left: playheadPosition - 100,
+                    behavior: 'smooth',
+                });
+            }
+        }
+    }, [currentPlayTime, isPlaying]);
+
+    return (
+        <div className="bg-gray-900/50 rounded-xl border border-white/10 overflow-hidden">
+            {/* Track Labels */}
+            <div className="flex border-b border-white/10">
+                <div className="w-20 flex-shrink-0 bg-gray-800/50 p-2 text-xs text-gray-400 font-medium">
+                    軌道
+                </div>
+                <div className="flex-1 overflow-hidden">
+                    {/* Time ruler placeholder */}
+                    <div className="h-8 bg-gray-800/30 flex items-center px-2 text-xs text-gray-500">
+                        {Array.from({ length: Math.ceil(totalDuration / 5) }).map((_, i) => (
+                            <span
+                                key={i}
+                                className="absolute"
+                                style={{ left: `${(i * 5 * LAYOUT_CONSTANTS.PIXELS_PER_SECOND) + 80}px` }}
+                            >
+                                {i * 5}s
+                            </span>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            {/* Tracks Container */}
+            <div className="flex">
+                {/* Track Labels Column */}
+                <div className="w-20 flex-shrink-0 bg-gray-800/50">
+                    <div className="h-16 flex items-center justify-center text-xs text-gray-400 border-b border-white/5">
+                        🖼️ 圖片
+                    </div>
+                    <div className="h-12 flex items-center justify-center text-xs text-gray-400 border-b border-white/5">
+                        📝 文字
+                    </div>
+                    <div className="h-16 flex items-center justify-center text-xs text-gray-400">
+                        🔊 語音
+                    </div>
+                </div>
+
+                {/* Scrollable Timeline */}
+                <div
+                    ref={containerRef}
+                    className="flex-1 overflow-x-auto relative"
+                    style={{ minWidth: 0 }}
+                >
+                    <div style={{ width: `${totalWidth}px`, minWidth: '100%' }}>
+                        {/* Image Track */}
+                        <div className="h-16 flex border-b border-white/5 relative">
+                            {timelineSegments.map((seg) => (
+                                <div
+                                    key={`img-${seg.id}`}
+                                    onClick={() => onSelectSegment(seg.id)}
+                                    className={`h-full flex items-center justify-center cursor-pointer transition-all border-r border-white/10 ${selectedSegmentId === seg.id
+                                        ? 'ring-2 ring-indigo-500 ring-inset'
+                                        : 'hover:bg-white/5'
+                                        } ${seg.assets.imageStatus === 'success'
+                                            ? 'bg-green-500/20'
+                                            : seg.assets.imageStatus === 'loading'
+                                                ? 'bg-yellow-500/20'
+                                                : seg.assets.imageStatus === 'error'
+                                                    ? 'bg-red-500/20'
+                                                    : 'bg-gray-700/30'
+                                        }`}
+                                    style={{ width: `${seg.duration * LAYOUT_CONSTANTS.PIXELS_PER_SECOND}px` }}
+                                >
+                                    {seg.assets.imageUrl ? (
+                                        <img
+                                            src={seg.assets.imageUrl}
+                                            alt=""
+                                            className="h-12 w-auto rounded object-cover"
+                                        />
+                                    ) : seg.assets.imageStatus === 'loading' ? (
+                                        <div className="w-4 h-4 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" />
+                                    ) : (
+                                        <span className="text-gray-500 text-xs">無圖</span>
+                                    )}
+                                </div>
+                            ))}
+
+                            {/* Playhead */}
+                            {isPlaying && (
+                                <div
+                                    className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10 pointer-events-none"
+                                    style={{ left: `${currentPlayTime * LAYOUT_CONSTANTS.PIXELS_PER_SECOND}px` }}
+                                >
+                                    <div className="w-3 h-3 bg-red-500 rounded-full -ml-[5px] -mt-1" />
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Text Track */}
+                        <div className="h-12 flex border-b border-white/5">
+                            {timelineSegments.map((seg) => (
+                                <div
+                                    key={`txt-${seg.id}`}
+                                    onClick={() => onSelectSegment(seg.id)}
+                                    className={`h-full flex items-center px-2 cursor-pointer transition-all border-r border-white/10 overflow-hidden ${selectedSegmentId === seg.id
+                                        ? 'ring-2 ring-indigo-500 ring-inset bg-indigo-500/10'
+                                        : 'hover:bg-white/5 bg-gray-700/20'
+                                        }`}
+                                    style={{ width: `${seg.duration * LAYOUT_CONSTANTS.PIXELS_PER_SECOND}px` }}
+                                >
+                                    <span className="text-gray-300 text-xs truncate">
+                                        {seg.text.slice(0, 20)}...
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Audio Track */}
+                        <div className="h-16 flex">
+                            {timelineSegments.map((seg) => (
+                                <div
+                                    key={`aud-${seg.id}`}
+                                    onClick={() => onSelectSegment(seg.id)}
+                                    className={`h-full flex items-center justify-center cursor-pointer transition-all border-r border-white/10 ${selectedSegmentId === seg.id
+                                        ? 'ring-2 ring-indigo-500 ring-inset'
+                                        : 'hover:bg-white/5'
+                                        } ${seg.assets.audioStatus === 'success'
+                                            ? 'bg-purple-500/20'
+                                            : seg.assets.audioStatus === 'loading'
+                                                ? 'bg-yellow-500/20'
+                                                : seg.assets.audioStatus === 'error'
+                                                    ? 'bg-red-500/20'
+                                                    : 'bg-gray-700/30'
+                                        }`}
+                                    style={{ width: `${seg.duration * LAYOUT_CONSTANTS.PIXELS_PER_SECOND}px` }}
+                                >
+                                    {seg.assets.audioStatus === 'success' ? (
+                                        <div className="flex items-center gap-1">
+                                            {/* Waveform visualization */}
+                                            {[3, 5, 7, 5, 8, 6, 4, 7, 5, 3].map((h, i) => (
+                                                <div
+                                                    key={i}
+                                                    className="w-1 bg-purple-400 rounded-full"
+                                                    style={{ height: `${h * 2}px` }}
+                                                />
+                                            ))}
+                                        </div>
+                                    ) : seg.assets.audioStatus === 'loading' ? (
+                                        <div className="w-4 h-4 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" />
+                                    ) : (
+                                        <span className="text-gray-500 text-xs">無音</span>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
