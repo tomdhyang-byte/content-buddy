@@ -48,6 +48,9 @@ OPENAI_API_KEY=sk-...
 GEMINI_API_KEY=AIza...
 MINIMAX_API_KEY=ey...
 MINIMAX_GROUP_ID=123...
+# AutoVideoMaker API (Local Export)
+AUTO_VIDEO_MAKER_URL=http://127.0.0.1:8000
+EXPORT_TEMP_DIR=/tmp
 ```
 
 ### 3. 啟動開發伺服器
@@ -58,6 +61,10 @@ npm run dev
 
 瀏覽器打開 [http://localhost:3000](http://localhost:3000) 即可開始使用。
 
+### 4. 啟動 AutoVideoMaker API (本地匯出必備)
+
+請確保 AutoVideoMaker API 服務已在 `http://127.0.0.1:8000` 運行，否則 Step 5 匯出功能將無法使用。
+
 ## 📂 專案結構
 
 詳細代碼結構與模組關係請參考 [CODE_STRUCTURE.md](./CODE_STRUCTURE.md)。
@@ -67,7 +74,8 @@ npm run dev
 *   **Step 1 (Setup):** `app/page.tsx`
 *   **Step 2 (Slicing):** `app/slice/page.tsx`
 *   **Step 3 (Timeline):** `app/review/page.tsx` & `components/timeline/*`
-*   **Step 4 (Export):** `app/export/page.tsx`
+*   **Step 4 (HeyGen):** `app/heygen/page.tsx`
+*   **Step 5 (Export):** `app/export/page.tsx`
 
 ---
 

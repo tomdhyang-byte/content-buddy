@@ -224,7 +224,7 @@ export default function ReviewPage() {
 
     const handleNextStep = () => {
         setCurrentStep(4);
-        router.push('/export');
+        router.push('/heygen');
     };
 
     if (state.segments.length === 0) {

@@ -10,7 +10,8 @@ ContentBuddy/
 │   ├── page.tsx          # Step 1: 首頁 (輸入腳本、選風格)
 │   ├── slice/            # Step 2: 切分頁 (AI 幫你把文章切成段落)
 │   ├── review/           # Step 3: 編輯頁 (最重要的編輯器都在這！)
-│   ├── export/           # Step 4: 匯出頁 (下載影片)
+│   ├── heygen/           # Step 4: HeyGen 對嘴頁 (匯出音頻、上傳影片)
+│   ├── export/           # Step 5: 匯出頁 (下載影片)
 │   └── api/              # ⚡️ 後端 API (處理 AI 請求的地方)
 │
 ├── components/           # 🧩積木元件 (UI Components)
@@ -40,6 +41,7 @@ ContentBuddy/
 *   **`app/page.tsx`**: 專案的起點。負責收集使用者的逐字稿、Avatar 圖片和選擇影片風格。
 *   **`app/slice/page.tsx`**: **「切分」** 階段。這裡會呼叫 AI 幫你把長文章切成好幾段，你可以手動調整切分結果。
 *   **`app/review/page.tsx`**: **「核心編輯器」**。這是最複雜的一頁，包含了預覽播放器、設定面板和時間軸。
+*   **`app/heygen/page.tsx`**: **「HeyGen 對嘴」** 階段。匯出合併音頻 (WAV) 或 ZIP，上傳 HeyGen 生成的對嘴影片。
 *   **`app/export/page.tsx`**: 最後一步。展示最終成果並提供下載按鈕。
 
 ### 2. 編輯器元件 (The Editor)

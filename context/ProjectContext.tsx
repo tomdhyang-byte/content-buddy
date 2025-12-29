@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useReducer, useCallback, ReactNode } from 'react';
-import { ProjectState, Segment, SegmentAssets, VisualStyle, GenerationStatus, PronunciationDictItem } from '@/types';
+import { ProjectState, Segment, SegmentAssets, VisualStyle, GenerationStatus, PronunciationDictItem, HeyGenState } from '@/types';
 
 // Default empty segment assets
 const createEmptyAssets = (): SegmentAssets => ({
@@ -13,6 +13,14 @@ const createEmptyAssets = (): SegmentAssets => ({
     audioStatus: 'idle',
 });
 
+// Default empty heygen state
+const createEmptyHeygenState = (): HeyGenState => ({
+    mergedAudioUrl: null,
+    mergedAudioDuration: null,
+    heygenVideoFile: null,
+    heygenVideoUrl: null,
+});
+
 // Initial state
 const initialState: ProjectState = {
     avatar: null,
@@ -22,6 +30,7 @@ const initialState: ProjectState = {
     script: '',
     segments: [],
     generatedAssets: new Map(),
+    heygen: createEmptyHeygenState(),
     currentStep: 1,
 };
 
@@ -38,7 +47,10 @@ type Action =
     | { type: 'UPDATE_ASSET_STATUS'; payload: { segmentId: string; field: keyof SegmentAssets; value: string | GenerationStatus | number | PronunciationDictItem[] | undefined } }
     | { type: 'INITIALIZE_ASSETS' }
     | { type: 'CLEAR_GENERATED_ASSETS' }
-    | { type: 'SET_CURRENT_STEP'; payload: 1 | 2 | 3 | 4 }
+    | { type: 'SET_MERGED_AUDIO'; payload: { url: string; duration: number } }
+    | { type: 'SET_HEYGEN_VIDEO'; payload: File }
+    | { type: 'CLEAR_HEYGEN' }
+    | { type: 'SET_CURRENT_STEP'; payload: 1 | 2 | 3 | 4 | 5 }
     | { type: 'RESET_PROJECT' };
 
 // Reducer
@@ -121,6 +133,37 @@ function projectReducer(state: ProjectState, action: Action): ProjectState {
         }
         case 'CLEAR_GENERATED_ASSETS':
             return { ...state, generatedAssets: new Map() };
+        case 'SET_MERGED_AUDIO':
+            return {
+                ...state,
+                heygen: {
+                    ...state.heygen,
+                    mergedAudioUrl: action.payload.url,
+                    mergedAudioDuration: action.payload.duration,
+                },
+            };
+        case 'SET_HEYGEN_VIDEO':
+            // Revoke old URL if exists
+            if (state.heygen.heygenVideoUrl) {
+                URL.revokeObjectURL(state.heygen.heygenVideoUrl);
+            }
+            return {
+                ...state,
+                heygen: {
+                    ...state.heygen,
+                    heygenVideoFile: action.payload,
+                    heygenVideoUrl: URL.createObjectURL(action.payload),
+                },
+            };
+        case 'CLEAR_HEYGEN':
+            // Revoke URLs
+            if (state.heygen.mergedAudioUrl) {
+                URL.revokeObjectURL(state.heygen.mergedAudioUrl);
+            }
+            if (state.heygen.heygenVideoUrl) {
+                URL.revokeObjectURL(state.heygen.heygenVideoUrl);
+            }
+            return { ...state, heygen: createEmptyHeygenState() };
         case 'SET_CURRENT_STEP':
             return { ...state, currentStep: action.payload };
         case 'RESET_PROJECT':
@@ -144,7 +187,10 @@ interface ProjectContextType {
     updateAssetStatus: (segmentId: string, field: keyof SegmentAssets, value: string | GenerationStatus | number | PronunciationDictItem[] | undefined) => void;
     initializeAssets: () => void;
     clearGeneratedAssets: () => void;
-    setCurrentStep: (step: 1 | 2 | 3 | 4) => void;
+    setMergedAudio: (url: string, duration: number) => void;
+    setHeygenVideo: (file: File) => void;
+    clearHeygen: () => void;
+    setCurrentStep: (step: 1 | 2 | 3 | 4 | 5) => void;
     resetProject: () => void;
 }
 
@@ -165,7 +211,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         dispatch({ type: 'UPDATE_ASSET_STATUS', payload: { segmentId, field, value } }), []);
     const initializeAssets = useCallback(() => dispatch({ type: 'INITIALIZE_ASSETS' }), []);
     const clearGeneratedAssets = useCallback(() => dispatch({ type: 'CLEAR_GENERATED_ASSETS' }), []);
-    const setCurrentStep = useCallback((step: 1 | 2 | 3 | 4) => dispatch({ type: 'SET_CURRENT_STEP', payload: step }), []);
+    const setMergedAudio = useCallback((url: string, duration: number) => dispatch({ type: 'SET_MERGED_AUDIO', payload: { url, duration } }), []);
+    const setHeygenVideo = useCallback((file: File) => dispatch({ type: 'SET_HEYGEN_VIDEO', payload: file }), []);
+    const clearHeygen = useCallback(() => dispatch({ type: 'CLEAR_HEYGEN' }), []);
+    const setCurrentStep = useCallback((step: 1 | 2 | 3 | 4 | 5) => dispatch({ type: 'SET_CURRENT_STEP', payload: step }), []);
     const resetProject = useCallback(() => dispatch({ type: 'RESET_PROJECT' }), []);
 
     const value: ProjectContextType = {
@@ -181,6 +230,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         updateAssetStatus,
         initializeAssets,
         clearGeneratedAssets,
+        setMergedAudio,
+        setHeygenVideo,
+        clearHeygen,
         setCurrentStep,
         resetProject,
     };

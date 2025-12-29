@@ -43,6 +43,14 @@ export interface SegmentAssets {
   voiceEmotion?: string;  // default 'neutral'
 }
 
+// HeyGen integration state (Step 4)
+export interface HeyGenState {
+  mergedAudioUrl: string | null;      // Merged MP3 blob URL
+  mergedAudioDuration: number | null; // Total duration in seconds
+  heygenVideoFile: File | null;       // Uploaded HeyGen video
+  heygenVideoUrl: string | null;      // Preview URL for the video
+}
+
 // Project state for the entire workflow
 export interface ProjectState {
   // Step 1: Setup data
@@ -58,8 +66,11 @@ export interface ProjectState {
   // Step 3: Generated assets (keyed by segment ID)
   generatedAssets: Map<string, SegmentAssets>;
 
+  // Step 4: HeyGen integration
+  heygen: HeyGenState;
+
   // Navigation state
-  currentStep: 1 | 2 | 3 | 4;
+  currentStep: 1 | 2 | 3 | 4 | 5;
 }
 
 // API Request/Response types
