@@ -88,7 +88,7 @@ export function TimelineContainer({
     }, [currentPlayTime, isPlaying]);
 
     return (
-        <div className="bg-gray-900/50 rounded-xl border border-white/10 overflow-hidden">
+        <div className="bg-gray-900/50 rounded-xl border border-white/10 overflow-hidden h-full flex flex-col">
             {/* Track Labels */}
             <div className="flex border-b border-white/10">
                 <div className="w-20 flex-shrink-0 bg-gray-800/50 p-2 text-xs text-gray-400 font-medium">

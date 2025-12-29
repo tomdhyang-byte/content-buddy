@@ -6,11 +6,13 @@ import { useProject } from '@/context/ProjectContext';
 import { Button, Card } from '@/components/ui';
 import { VisualStyle } from '@/types';
 
-const VISUAL_STYLES: { value: VisualStyle; label: string; description: string }[] = [
-  { value: 'default', label: '預設風格', description: '平衡的視覺風格' },
-  { value: 'cinematic', label: '電影風格', description: '戲劇性的電影感畫面' },
-  { value: 'anime', label: '動漫風格', description: '日系動漫插畫風格' },
-];
+import { STYLE_LIBRARY } from '@/config/styles';
+
+const VISUAL_STYLES = STYLE_LIBRARY.map(style => ({
+  value: style.id as VisualStyle,
+  label: style.label,
+  description: style.description,
+}));
 
 export default function SetupPage() {
   const router = useRouter();

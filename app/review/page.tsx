@@ -6,7 +6,7 @@ import { useProject } from '@/context/ProjectContext';
 import { Button, ConfirmModal } from '@/components/ui';
 import {
     TimelineContainer,
-    InspectorPanel,
+    ConfigPanel,
     PreviewPlayer,
     calculateTimelineSegments,
 } from '@/components/timeline';
@@ -23,7 +23,6 @@ export default function ReviewPage() {
     } = useProject();
 
     const [showBackModal, setShowBackModal] = useState(false);
-    const [promptsGenerated, setPromptsGenerated] = useState(false);
     const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentPlayTime, setCurrentPlayTime] = useState(0);
@@ -38,25 +37,15 @@ export default function ReviewPage() {
         }
     }, [state.segments, router, selectedSegmentId]);
 
-    // Initialize assets and generate prompts on mount
+    // Initialize assets on mount (without auto-generating prompts)
     useEffect(() => {
-        if (state.segments.length === 0 || promptsGenerated) return;
+        if (state.segments.length === 0) return;
 
         // Initialize asset map if empty
         if (state.generatedAssets.size === 0) {
             initializeAssets();
         }
-
-        // Generate prompts for all segments
-        const generatePrompts = async () => {
-            for (const segment of state.segments) {
-                await generatePromptForSegment(segment.id, segment.text);
-            }
-            setPromptsGenerated(true);
-        };
-
-        generatePrompts();
-    }, [state.segments, state.generatedAssets.size, initializeAssets, promptsGenerated]);
+    }, [state.segments, state.generatedAssets.size, initializeAssets]);
 
     const generatePromptForSegment = async (segmentId: string, text: string) => {
         updateAssetStatus(segmentId, 'promptStatus', 'loading');
@@ -117,6 +106,9 @@ export default function ReviewPage() {
     const generateAudioForSegment = async (segmentId: string, text: string) => {
         updateAssetStatus(segmentId, 'audioStatus', 'loading');
 
+        // Get current assets for this segment
+        const segmentAssets = state.generatedAssets.get(segmentId);
+
         try {
             const response = await fetch('/api/generate/audio', {
                 method: 'POST',
@@ -125,6 +117,9 @@ export default function ReviewPage() {
                     segmentId,
                     text,
                     voiceId: state.voiceId,
+                    pronunciationDict: segmentAssets?.customPronunciations || [],
+                    speed: segmentAssets?.voiceSpeed || 1.2,
+                    emotion: segmentAssets?.voiceEmotion || 'neutral',
                 }),
             });
 
@@ -152,7 +147,7 @@ export default function ReviewPage() {
         if (selectedSegmentId) {
             generateImageForSegment(selectedSegmentId);
         }
-    }, [selectedSegmentId]);
+    }, [selectedSegmentId, state.generatedAssets]);
 
     const handleGenerateAudio = useCallback(() => {
         if (selectedSegmentId) {
@@ -161,7 +156,7 @@ export default function ReviewPage() {
                 generateAudioForSegment(selectedSegmentId, segment.text);
             }
         }
-    }, [selectedSegmentId, state.segments]);
+    }, [selectedSegmentId, state.segments, state.generatedAssets]);
 
     const handleBack = () => {
         // Check if any assets or prompts have been generated
@@ -204,7 +199,7 @@ export default function ReviewPage() {
     const selectedAssets = selectedSegmentId ? state.generatedAssets.get(selectedSegmentId) || null : null;
 
     // Check if all segments are complete
-    const allComplete = state.segments.every((segment) => {
+    const allComplete = state.segments.length > 0 && state.segments.every((segment) => {
         const assets = state.generatedAssets.get(segment.id);
         return assets?.imageStatus === 'success' && assets?.audioStatus === 'success';
     });
@@ -216,54 +211,52 @@ export default function ReviewPage() {
         return assets?.imageStatus === 'success' && assets?.audioStatus === 'success';
     }).length;
 
+    const handleSelectSegment = (id: string) => {
+        setSelectedSegmentId(id);
+        if (id) {
+            const segment = timelineSegments.find(s => s.id === id);
+            if (segment && segment.startTime !== undefined) {
+                setCurrentPlayTime(segment.startTime);
+                setIsPlaying(true);
+            }
+        }
+    };
+
+    const handleNextStep = () => {
+        setCurrentStep(4);
+        router.push('/export');
+    };
+
     if (state.segments.length === 0) {
         return null;
     }
 
     return (
-        <div className="min-h-screen flex flex-col">
+        <div className="flex flex-col h-screen bg-gray-950 text-white">
             {/* Header */}
-            <header className="flex-shrink-0 bg-gray-900/80 backdrop-blur-xl border-b border-white/10 px-6 py-3">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="sm" onClick={handleBack}>
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12" />
-                            </svg>
-                            返回
-                        </Button>
-                        <div>
-                            <h1 className="text-lg font-semibold text-white">Step 3: 素材生成</h1>
-                            <p className="text-xs text-gray-400">
-                                完成進度：{completedSegments} / {totalSegments} 段落
-                            </p>
-                        </div>
-                    </div>
-
-                    <Button
-                        onClick={handleExport}
-                        disabled={!allComplete}
-                        size="sm"
-                    >
-                        匯出影片 →
+            <header className="h-16 border-b border-white/10 bg-gray-900/50 backdrop-blur flex items-center justify-between px-6 flex-shrink-0">
+                <div className="flex items-center gap-4">
+                    <Button variant="ghost" size="sm" onClick={handleBack}>
+                        ← 返回
                     </Button>
+                    <h1>Review & Export</h1>
                 </div>
-
-                {/* Progress Bar */}
-                <div className="mt-2 h-1 bg-white/10 rounded-full overflow-hidden">
-                    <div
-                        className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-500"
-                        style={{ width: `${(completedSegments / totalSegments) * 100}%` }}
-                    />
+                <div className="flex items-center gap-4">
+                    <div className="text-xs text-gray-400">
+                        進度: {completedSegments} / {totalSegments}
+                    </div>
+                    <Button variant="primary" onClick={handleNextStep} disabled={!allComplete}>
+                        下一步 (匯出) →
+                    </Button>
                 </div>
             </header>
 
-            {/* Main Content - Classic Split Layout */}
-            <div className="flex-1 flex flex-col p-4 gap-4 overflow-hidden">
-                {/* Top Row: Preview + Inspector */}
-                <div className="flex gap-4" style={{ height: '45%' }}>
-                    {/* Preview Player - Left */}
-                    <div className="w-1/2 flex-shrink-0">
+            {/* Main Content - Quadrant Layout */}
+            <div className="flex-1 min-h-0 flex flex-col gap-4 p-4 overflow-hidden">
+                {/* Top Row: Preview + Config (Equal Heights) */}
+                <div className="flex-1 min-h-0 flex gap-4">
+                    {/* Left: Preview Player (16:9 handled internally by PreviewPlayer) */}
+                    <div className="flex-[1.5] min-w-0">
                         <PreviewPlayer
                             segments={timelineSegments}
                             isPlaying={isPlaying}
@@ -274,44 +267,42 @@ export default function ReviewPage() {
                         />
                     </div>
 
-                    {/* Inspector Panel - Right (Inline, no fixed width) */}
-                    <div className="flex-1 bg-gray-900/50 rounded-xl border border-white/10 overflow-hidden">
-                        <InspectorPanel
+                    {/* Right: Config Panel */}
+                    <div className="flex-1 min-w-[320px]">
+                        <ConfigPanel
                             segmentId={selectedSegmentId}
                             segmentIndex={selectedSegmentIndex}
                             segmentText={selectedSegment?.text || ''}
                             assets={selectedAssets}
                             onPromptChange={handlePromptChange}
+                            onGeneratePrompt={() => {
+                                if (selectedSegmentId && selectedSegment) {
+                                    generatePromptForSegment(selectedSegmentId, selectedSegment.text);
+                                }
+                            }}
                             onGenerateImage={handleGenerateImage}
                             onGenerateAudio={handleGenerateAudio}
-                            allComplete={allComplete}
-                            onGeneratePreview={() => setIsPlaying(true)}
-                            onUpdateDictionary={(items) => {
+                            onUpdateDictionary={(items: PronunciationDictItem[]) => {
                                 if (selectedSegmentId) {
                                     updateAssetStatus(selectedSegmentId, 'customPronunciations', items);
+                                }
+                            }}
+                            onUpdateVoiceSettings={(key: 'voiceSpeed' | 'voiceEmotion', value: number | string) => {
+                                if (selectedSegmentId) {
+                                    updateAssetStatus(selectedSegmentId, key, value);
                                 }
                             }}
                         />
                     </div>
                 </div>
 
-                {/* Bottom Row: Timeline (Full Width) */}
-                <div className="flex-1 min-h-0">
+                {/* Bottom Row: Timeline (Full Width, Fixed Height) */}
+                <div className="h-[220px] flex-shrink-0 flex flex-col">
                     <TimelineContainer
                         segments={state.segments}
                         generatedAssets={state.generatedAssets}
                         selectedSegmentId={selectedSegmentId}
-                        onSelectSegment={(id) => {
-                            setSelectedSegmentId(id);
-                            // Also seek to the start of the segment
-                            if (id) {
-                                const segments = calculateTimelineSegments(state.segments, state.generatedAssets);
-                                const segment = segments.find(s => s.id === id);
-                                if (segment) {
-                                    setCurrentPlayTime(segment.startTime);
-                                }
-                            }
-                        }}
+                        onSelectSegment={handleSelectSegment}
                         isPlaying={isPlaying}
                         currentPlayTime={currentPlayTime}
                     />
@@ -338,3 +329,4 @@ export default function ReviewPage() {
         </div>
     );
 }
+

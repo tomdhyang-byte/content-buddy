@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useMemo, useCallback } from 'react';
 import { TimelineSegment } from './TimelineContainer';
 
 interface PreviewPlayerProps {
@@ -21,82 +21,93 @@ export function PreviewPlayer({
     onPlayComplete,
 }: PreviewPlayerProps) {
     const audioRef = useRef<HTMLAudioElement>(null);
-    const [currentSegmentIndex, setCurrentSegmentIndex] = useState(0);
-    const [currentImage, setCurrentImage] = useState<string | null>(null);
-    const animationFrameRef = useRef<number>();
-
-    // Sync currentSegmentIndex with currentTime
-    useEffect(() => {
-        let accumulatedTime = 0;
-        let foundIndex = -1;
-
-        for (let i = 0; i < segments.length; i++) {
-            const duration = segments[i].duration;
-            if (currentTime >= accumulatedTime && currentTime < accumulatedTime + duration) {
-                foundIndex = i;
-                break;
-            }
-            accumulatedTime += duration;
-        }
-
-        // Handle end case (currentTime >= totalDuration), select last segment
-        if (foundIndex === -1 && segments.length > 0) {
-            foundIndex = segments.length - 1;
-        }
-
-        if (foundIndex !== -1 && foundIndex !== currentSegmentIndex) {
-            setCurrentSegmentIndex(foundIndex);
-        }
-    }, [currentTime, segments, currentSegmentIndex]);
-
-    // Get current segment
-    const currentSegment = segments[currentSegmentIndex];
+    const animationFrameRef = useRef<number | null>(null);
+    const lastSegmentIndexRef = useRef<number>(-1);
 
     // Check if all segments are ready
     const allReady = segments.every(
         (seg) => seg.assets.imageStatus === 'success' && seg.assets.audioStatus === 'success'
     );
 
-    // Update current image when segment changes
-    useEffect(() => {
-        if (currentSegment?.assets.imageUrl) {
-            setCurrentImage(currentSegment.assets.imageUrl);
+    // Derive current segment index from currentTime (Single Source of Truth)
+    const { currentSegmentIndex, segmentStartTime, currentSegment } = useMemo(() => {
+        let accumulatedTime = 0;
+        for (let i = 0; i < segments.length; i++) {
+            const duration = segments[i].duration;
+            if (currentTime >= accumulatedTime && currentTime < accumulatedTime + duration) {
+                return {
+                    currentSegmentIndex: i,
+                    segmentStartTime: accumulatedTime,
+                    currentSegment: segments[i],
+                };
+            }
+            accumulatedTime += duration;
         }
-    }, [currentSegment]);
+        // Fallback to last segment if time exceeds total
+        if (segments.length > 0) {
+            const lastIndex = segments.length - 1;
+            const lastStart = segments.slice(0, lastIndex).reduce((sum, s) => sum + s.duration, 0);
+            return {
+                currentSegmentIndex: lastIndex,
+                segmentStartTime: lastStart,
+                currentSegment: segments[lastIndex],
+            };
+        }
+        return { currentSegmentIndex: 0, segmentStartTime: 0, currentSegment: undefined };
+    }, [currentTime, segments]);
 
-    // Handle play/pause
+    // Derive current image
+    const currentImage = currentSegment?.assets.imageUrl || null;
+
+    // Handle segment change: Reset and load new audio
     useEffect(() => {
-        if (!audioRef.current || !currentSegment) return;
+        if (!audioRef.current || !currentSegment?.assets.audioUrl) return;
+
+        // Only reset audio if segment actually changed
+        if (lastSegmentIndexRef.current !== currentSegmentIndex) {
+            lastSegmentIndexRef.current = currentSegmentIndex;
+
+            const audio = audioRef.current;
+            audio.pause();
+            audio.src = currentSegment.assets.audioUrl;
+            audio.currentTime = 0;
+
+            if (isPlaying) {
+                audio.play().catch(console.error);
+            }
+        }
+    }, [currentSegmentIndex, currentSegment, isPlaying]);
+
+    // Handle play/pause state changes
+    useEffect(() => {
+        if (!audioRef.current) return;
 
         if (isPlaying) {
-            // Set audio source for current segment
-            if (currentSegment.assets.audioUrl) {
-                audioRef.current.src = currentSegment.assets.audioUrl;
+            if (audioRef.current.paused && audioRef.current.src) {
                 audioRef.current.play().catch(console.error);
             }
         } else {
             audioRef.current.pause();
         }
-    }, [isPlaying, currentSegment]);
+    }, [isPlaying]);
 
-    // Time tracking
+    // Time tracking loop (only while playing)
     useEffect(() => {
         if (!isPlaying) {
             if (animationFrameRef.current) {
                 cancelAnimationFrame(animationFrameRef.current);
+                animationFrameRef.current = null;
             }
             return;
         }
 
         const updateTime = () => {
-            if (!audioRef.current) return;
+            if (!audioRef.current || audioRef.current.ended || audioRef.current.paused) {
+                animationFrameRef.current = requestAnimationFrame(updateTime);
+                return;
+            }
 
-            // Calculate global time
-            const segmentStartTime = segments
-                .slice(0, currentSegmentIndex)
-                .reduce((sum, seg) => sum + seg.duration, 0);
             const globalTime = segmentStartTime + audioRef.current.currentTime;
-
             onTimeUpdate(globalTime);
             animationFrameRef.current = requestAnimationFrame(updateTime);
         };
@@ -108,67 +119,52 @@ export function PreviewPlayer({
                 cancelAnimationFrame(animationFrameRef.current);
             }
         };
-    }, [isPlaying, currentSegmentIndex, segments, onTimeUpdate]);
+    }, [isPlaying, segmentStartTime, onTimeUpdate]);
 
-    // Handle audio end - move to next segment
+    // Handle audio end - notify parent to advance
     const handleAudioEnd = useCallback(() => {
         if (currentSegmentIndex < segments.length - 1) {
-            setCurrentSegmentIndex(currentSegmentIndex + 1);
+            // Calculate next segment start time
+            const nextStartTime = segments
+                .slice(0, currentSegmentIndex + 1)
+                .reduce((sum, seg) => sum + seg.duration, 0);
+            onTimeUpdate(nextStartTime);
         } else {
-            // All segments played
+            // All segments finished
             onPlayStateChange(false);
             onPlayComplete();
-            setCurrentSegmentIndex(0);
+            onTimeUpdate(0);
         }
-    }, [currentSegmentIndex, segments.length, onPlayStateChange, onPlayComplete]);
+    }, [currentSegmentIndex, segments, onTimeUpdate, onPlayStateChange, onPlayComplete]);
 
-    // Auto-play next segment
+    // Attach audio end listener
     useEffect(() => {
-        if (!isPlaying || !audioRef.current) return;
-
         const audio = audioRef.current;
-        audio.addEventListener('ended', handleAudioEnd);
+        if (!audio) return;
 
+        audio.addEventListener('ended', handleAudioEnd);
         return () => {
             audio.removeEventListener('ended', handleAudioEnd);
         };
-    }, [isPlaying, handleAudioEnd]);
-
-    // Play next segment after index changes
-    useEffect(() => {
-        if (isPlaying && currentSegment?.assets.audioUrl && audioRef.current) {
-            audioRef.current.src = currentSegment.assets.audioUrl;
-            audioRef.current.play().catch(console.error);
-        }
-    }, [currentSegmentIndex, isPlaying, currentSegment]);
+    }, [handleAudioEnd]);
 
     const handlePlayPause = () => {
         if (!allReady) return;
         onPlayStateChange(!isPlaying);
     };
 
-    const handleReset = () => {
-        onPlayStateChange(false);
-        setCurrentSegmentIndex(0);
-        onTimeUpdate(0);
-        if (audioRef.current) {
-            audioRef.current.pause();
-            audioRef.current.currentTime = 0;
-        }
-    };
-
     return (
-        <div className="bg-gray-900/50 rounded-xl border border-white/10 overflow-hidden">
+        <div className="bg-gray-900/50 rounded-xl border border-white/10 overflow-hidden flex flex-col w-full h-full">
             {/* Video Preview Area */}
-            <div className="aspect-video bg-black relative flex items-center justify-center">
+            <div className="flex-1 min-h-0 bg-black relative flex items-center justify-center overflow-hidden">
                 {currentImage ? (
                     <img
                         src={currentImage}
                         alt="Preview"
-                        className="w-full h-full object-contain"
+                        className="max-w-full max-h-full object-contain"
                     />
                 ) : (
-                    <div className="text-gray-500 text-center">
+                    <div className="text-gray-500 text-center p-4">
                         <div className="text-4xl mb-2">🎬</div>
                         <p>生成素材後可預覽</p>
                     </div>
@@ -176,15 +172,15 @@ export function PreviewPlayer({
 
                 {/* Segment indicator */}
                 {isPlaying && (
-                    <div className="absolute top-4 left-4 bg-black/70 px-3 py-1 rounded-full text-white text-sm">
+                    <div className="absolute top-4 left-4 bg-black/70 px-3 py-1 rounded-full text-white text-sm z-10">
                         段落 {currentSegmentIndex + 1} / {segments.length}
                     </div>
                 )}
             </div>
 
             {/* Controls */}
-            <div className="p-4 flex items-center justify-center gap-4">
-                <div className="w-10 h-10" /> {/* Spacer for balance */}
+            <div className="p-4 flex-shrink-0 flex items-center justify-center gap-4 bg-gray-900/30 backdrop-blur-sm border-t border-white/5">
+                <div className="w-10 h-10" />
 
                 {allReady ? (
                     <button
@@ -211,7 +207,7 @@ export function PreviewPlayer({
                     </div>
                 )}
 
-                <div className="w-10 h-10" /> {/* Spacer for balance */}
+                <div className="w-10 h-10" />
             </div>
 
             {/* Hidden audio element */}

@@ -45,9 +45,15 @@ graph TD
         
         subgraph TIMELINE ["/timeline (Step 3 Editor)"]
             tl_cont["TimelineContainer.tsx"]
-            tl_insp["InspectorPanel.tsx"]
+            tl_conf["ConfigPanel.tsx"]
             tl_prev["PreviewPlayer.tsx"]
         end
+
+        subgraph SHARED_UI ["/ui"]
+            ui_modal["EditModal.tsx"]
+        end
+        
+        link_conf_modal["ConfigPanel -> EditModal"]
         
         comp_seg["SegmentCard.tsx"]
     end
@@ -76,8 +82,9 @@ graph TD
     ctx_proj --> p_export
     
     p_review --> tl_cont
-    p_review --> tl_insp
+    p_review --> tl_conf
     p_review --> tl_prev
+    tl_conf --> link_conf_modal
     
     api_slice --> lib_openai
     api_prompt --> lib_openai
@@ -99,9 +106,9 @@ graph TD
 - **ProjectContext:** Uses `useReducer` to handle the complex state of the video project, including segments, generated assets, and navigation history.
 
 ### 3. Timeline Editor Components
-- **TimelineContainer:** Handles the horizontal scrolling tracks (Image, Text, Audio).
-- **InspectorPanel:** Context-aware sidebar for editing prompts and triggering generation.
-- **PreviewPlayer:** Synchronized player that updates images based on audio playback time.
+- **TimelineContainer:** Handles the horizontal scrolling tracks (Image, Text, Audio). Click-to-play enabled.
+- **ConfigPanel:** Quadrant-based editor for prompts and media generation. Replaced legacy InspectorPanel.
+- **PreviewPlayer:** Time-driven controlled component. Syncs perfectly with timeline selection.
 
 ### 4. AI Services (Stateless)
 - **OpenAI:** Used for Script Slicing and Image Prompt Generation.

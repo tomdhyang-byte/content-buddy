@@ -37,6 +37,10 @@ export interface SegmentAssets {
   audioError?: string;
   audioDuration?: number; // in seconds
   customPronunciations?: PronunciationDictItem[];
+
+  // Voice settings (per-segment, with defaults)
+  voiceSpeed?: number;    // default 1.2, range 0.5-2.0
+  voiceEmotion?: string;  // default 'neutral'
 }
 
 // Project state for the entire workflow

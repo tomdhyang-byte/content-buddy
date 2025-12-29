@@ -54,7 +54,6 @@ export async function generateImagePrompt(
                 content: text,
             },
         ],
-        response_format: { type: 'json_object' },
         temperature: PROMPT_CONFIG.imageGeneration.temperature,
     });
 
@@ -65,22 +64,6 @@ export async function generateImagePrompt(
         throw new Error('OpenAI returned empty response');
     }
 
-    try {
-        const parsed = JSON.parse(content);
-
-        // Handle various possible response formats
-        const prompt = parsed.prompt || parsed.image_prompt || parsed.description;
-
-        if (!prompt) {
-            console.error('[generateImagePrompt] Parsed object missing prompt field:', parsed);
-            throw new Error('Response missing prompt field');
-        }
-
-        return prompt as string;
-    } catch (parseError) {
-        console.error('[generateImagePrompt] JSON parse error:', parseError);
-        console.error('[generateImagePrompt] Raw content was:', content);
-        throw new Error(`Failed to parse OpenAI response: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`);
-    }
+    return content;
 }
 

@@ -23,6 +23,8 @@ export const GenerateAudioRequestSchema = z.object({
         text: z.string(),
         pronunciation: z.string(),
     })).optional(),
+    speed: z.number().min(0.5).max(2.0).optional().default(1.2),
+    emotion: z.string().optional().default('neutral'),
 });
 
 export const ExportRequestSchema = z.object({

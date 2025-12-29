@@ -7,9 +7,9 @@ export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
 
-        const { segmentId, text, voiceId, pronunciationDict } = GenerateAudioRequestSchema.parse(body);
+        const { segmentId, text, voiceId, pronunciationDict, speed, emotion } = GenerateAudioRequestSchema.parse(body);
 
-        const result = await generateAudio(text, voiceId, pronunciationDict);
+        const result = await generateAudio(text, voiceId, pronunciationDict, speed, emotion);
 
         return NextResponse.json<GenerateAudioResponse>({
             segmentId,

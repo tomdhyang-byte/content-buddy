@@ -1,4 +1,4 @@
-export { TimelineContainer, calculateTimelineSegments, PIXELS_PER_SECOND, DEFAULT_SEGMENT_DURATION } from './TimelineContainer';
+export { TimelineContainer, calculateTimelineSegments } from './TimelineContainer';
 export type { TimelineSegment } from './TimelineContainer';
-export { InspectorPanel } from './InspectorPanel';
+export { ConfigPanel } from './ConfigPanel';
 export { PreviewPlayer } from './PreviewPlayer';

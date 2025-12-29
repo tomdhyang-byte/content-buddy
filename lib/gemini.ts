@@ -1,6 +1,6 @@
 import { GoogleGenAI, Modality } from '@google/genai';
-import * as fs from 'fs';
-import * as path from 'path';
+
+import { PROMPT_CONFIG } from '@/config/prompts';
 
 // Initialize Gemini client
 const genAI = new GoogleGenAI({
@@ -9,7 +9,7 @@ const genAI = new GoogleGenAI({
 
 export async function generateImage(prompt: string): Promise<string> {
     const response = await genAI.models.generateContent({
-        model: 'gemini-2.0-flash-exp',
+        model: PROMPT_CONFIG.models.imageGeneration,
         contents: prompt,
         config: {
             responseModalities: [Modality.TEXT, Modality.IMAGE],
