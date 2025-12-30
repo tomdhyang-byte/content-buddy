@@ -5,7 +5,7 @@ export const PROMPT_CONFIG = {
     models: {
         slicing: 'gpt-5.1',
         imagePrompt: 'gpt-5.2',
-        imageGeneration: 'gemini-2.5-flash-image', //gemini-3-pro-image-preview
+        imageGeneration: 'gemini-3-pro-image-preview', //gemini-2.5-flash-image
         audioGeneration: 'speech-2.6-hd',
     },
 

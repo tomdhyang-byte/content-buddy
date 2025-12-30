@@ -10,6 +10,9 @@ interface PreviewPlayerProps {
     onPlayStateChange: (playing: boolean) => void;
     onTimeUpdate: (time: number) => void;
     onPlayComplete: () => void;
+    onBatchGenerate: () => void;
+    isBatchGenerating: boolean;
+    onSegmentChange?: (segmentId: string) => void;
 }
 
 export function PreviewPlayer({
@@ -19,6 +22,9 @@ export function PreviewPlayer({
     onPlayStateChange,
     onTimeUpdate,
     onPlayComplete,
+    onBatchGenerate,
+    isBatchGenerating,
+    onSegmentChange,
 }: PreviewPlayerProps) {
     const audioRef = useRef<HTMLAudioElement>(null);
     const animationFrameRef = useRef<number | null>(null);
@@ -75,8 +81,13 @@ export function PreviewPlayer({
             if (isPlaying) {
                 audio.play().catch(console.error);
             }
+
+            // Notify parent about segment change for UI sync
+            if (onSegmentChange && currentSegment) {
+                onSegmentChange(currentSegment.id);
+            }
         }
-    }, [currentSegmentIndex, currentSegment, isPlaying]);
+    }, [currentSegmentIndex, currentSegment, isPlaying, onSegmentChange]);
 
     // Handle play/pause state changes
     useEffect(() => {
@@ -153,6 +164,8 @@ export function PreviewPlayer({
         onPlayStateChange(!isPlaying);
     };
 
+    const completedCount = segments.filter(s => s.assets.imageStatus === 'success' && s.assets.audioStatus === 'success').length;
+
     return (
         <div className="bg-gray-900/50 rounded-xl border border-white/10 overflow-hidden flex flex-col w-full h-full">
             {/* Video Preview Area */}
@@ -166,7 +179,7 @@ export function PreviewPlayer({
                 ) : (
                     <div className="text-gray-500 text-center p-4">
                         <div className="text-4xl mb-2">🎬</div>
-                        <p>生成素材後可預覽</p>
+                        <p>生成素材後可預覽 {completedCount} / {segments.length}</p>
                     </div>
                 )}
 
@@ -199,12 +212,27 @@ export function PreviewPlayer({
                         )}
                     </button>
                 ) : (
-                    <div className="h-14 px-5 rounded-full bg-gray-800 border border-white/10 flex flex-col items-center justify-center min-w-[140px] cursor-not-allowed opacity-80">
-                        <span className="text-xs text-gray-400 mb-0.5">⏳ 等待生成</span>
-                        <span className="text-sm font-mono text-white font-medium">
-                            {segments.filter(s => s.assets.imageStatus === 'success' && s.assets.audioStatus === 'success').length} / {segments.length}
-                        </span>
-                    </div>
+                    <button
+                        onClick={onBatchGenerate}
+                        disabled={isBatchGenerating}
+                        className={`h-14 px-6 rounded-full border flex items-center justify-center gap-2 min-w-[200px] transition-all
+                            ${isBatchGenerating
+                                ? 'bg-gray-800 border-white/10 text-gray-400 cursor-not-allowed'
+                                : 'bg-indigo-600/20 border-indigo-500/50 text-indigo-300 hover:bg-indigo-600/30 hover:border-indigo-500 hover:text-white hover:shadow-lg hover:shadow-indigo-500/20'
+                            }`}
+                    >
+                        {isBatchGenerating ? (
+                            <>
+                                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                <span className="text-sm font-medium">生成中... ({completedCount}/{segments.length})</span>
+                            </>
+                        ) : (
+                            <>
+                                <span className="text-lg">⚡</span>
+                                <span className="text-sm font-medium">一鍵生成全部素材 ({completedCount}/{segments.length})</span>
+                            </>
+                        )}
+                    </button>
                 )}
 
                 <div className="w-10 h-10" />

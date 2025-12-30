@@ -26,6 +26,7 @@ export default function ReviewPage() {
     const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentPlayTime, setCurrentPlayTime] = useState(0);
+    const [isBatchGenerating, setIsBatchGenerating] = useState(false);
 
     // Redirect if no segments
     useEffect(() => {
@@ -47,7 +48,7 @@ export default function ReviewPage() {
         }
     }, [state.segments, state.generatedAssets.size, initializeAssets]);
 
-    const generatePromptForSegment = async (segmentId: string, text: string) => {
+    const generatePromptForSegment = async (segmentId: string, text: string): Promise<string | null> => {
         updateAssetStatus(segmentId, 'promptStatus', 'loading');
 
         try {
@@ -68,15 +69,19 @@ export default function ReviewPage() {
             const data: GeneratePromptResponse = await response.json();
             updateAssetStatus(segmentId, 'imagePrompt', data.prompt);
             updateAssetStatus(segmentId, 'promptStatus', 'success');
+            return data.prompt;
         } catch (error) {
             updateAssetStatus(segmentId, 'promptStatus', 'error');
             updateAssetStatus(segmentId, 'promptError', error instanceof Error ? error.message : 'Unknown error');
+            return null;
         }
     };
 
-    const generateImageForSegment = async (segmentId: string) => {
+    const generateImageForSegment = async (segmentId: string, promptOverride?: string) => {
         const assets = state.generatedAssets.get(segmentId);
-        if (!assets?.imagePrompt) return;
+        const promptToUse = promptOverride || assets?.imagePrompt;
+
+        if (!promptToUse) return;
 
         updateAssetStatus(segmentId, 'imageStatus', 'loading');
 
@@ -86,7 +91,7 @@ export default function ReviewPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     segmentId,
-                    prompt: assets.imagePrompt,
+                    prompt: promptToUse,
                 }),
             });
 
@@ -158,6 +163,42 @@ export default function ReviewPage() {
         }
     }, [selectedSegmentId, state.segments, state.generatedAssets]);
 
+    const processSegment = async (segment: Segment) => {
+        try {
+            const assets = state.generatedAssets.get(segment.id);
+            let currentPrompt = assets?.imagePrompt;
+
+            // 1. Generate Prompt if missing
+            if (!currentPrompt) {
+                currentPrompt = await generatePromptForSegment(segment.id, segment.text);
+            }
+
+            // 2. Generate Image if missing (and we have a prompt)
+            if (currentPrompt && !assets?.imageUrl) {
+                await generateImageForSegment(segment.id, currentPrompt);
+            }
+
+            // 3. Generate Audio if missing
+            if (!assets?.audioUrl) {
+                await generateAudioForSegment(segment.id, segment.text);
+            }
+        } catch (error) {
+            console.error(`Error processing segment ${segment.id}`, error);
+            // Individual errors are caught here, allowing other segments to proceed
+            // UI will naturally reflect the error state set by updateAssetStatus in the helper functions
+        }
+    };
+
+    const handleBatchGenerate = async () => {
+        if (isBatchGenerating) return;
+        setIsBatchGenerating(true);
+
+        // Process ALL segments concurrently for maximum speed
+        await Promise.all(state.segments.map(segment => processSegment(segment)));
+
+        setIsBatchGenerating(false);
+    };
+
     const handleBack = () => {
         // Check if any assets or prompts have been generated
         let hasGeneratedContent = false;
@@ -182,10 +223,7 @@ export default function ReviewPage() {
         router.push('/slice');
     };
 
-    const handleExport = () => {
-        setCurrentStep(4);
-        router.push('/export');
-    };
+
 
     // Calculate timeline segments with timing
     const timelineSegments = useMemo(
@@ -213,7 +251,11 @@ export default function ReviewPage() {
 
     const handleSelectSegment = (id: string) => {
         setSelectedSegmentId(id);
-        if (id) {
+
+        // Context-Aware Logic:
+        // 1. If all assets are ready (Preview Mode) -> Click seeks to that segment and plays
+        // 2. If assets incomplete (Editing Mode) -> Click only selects (no sound)
+        if (allComplete) {
             const segment = timelineSegments.find(s => s.id === id);
             if (segment && segment.startTime !== undefined) {
                 setCurrentPlayTime(segment.startTime);
@@ -264,6 +306,9 @@ export default function ReviewPage() {
                             onPlayStateChange={setIsPlaying}
                             onTimeUpdate={setCurrentPlayTime}
                             onPlayComplete={() => setIsPlaying(false)}
+                            onBatchGenerate={handleBatchGenerate}
+                            isBatchGenerating={isBatchGenerating}
+                            onSegmentChange={setSelectedSegmentId}
                         />
                     </div>
 

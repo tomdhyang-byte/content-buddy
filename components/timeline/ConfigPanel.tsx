@@ -39,7 +39,7 @@ export function ConfigPanel({
 
     // Audio player state
     const audioRef = useRef<HTMLAudioElement | null>(null);
-    const audioInstanceRef = useRef<HTMLAudioElement>(new Audio()); // Persistent instance
+    const audioInstanceRef = useRef<HTMLAudioElement | null>(null); // Persistent instance
     const [isAudioPlaying, setIsAudioPlaying] = useState(false);
 
     // Sync prompt from assets
@@ -53,6 +53,9 @@ export function ConfigPanel({
 
     // Handle audio lifecycle
     useEffect(() => {
+        if (!audioInstanceRef.current) {
+            audioInstanceRef.current = new Audio();
+        }
         const audio = audioInstanceRef.current;
 
         const handleEnded = () => setIsAudioPlaying(false);
@@ -74,9 +77,9 @@ export function ConfigPanel({
 
     // Update audio source when asset changes
     useEffect(() => {
+        if (!audioInstanceRef.current) return;
         const audio = audioInstanceRef.current;
         if (assets?.audioUrl && audio.src !== assets.audioUrl) {
-            const wasPlaying = !audio.paused;
             audio.src = assets.audioUrl;
             // Don't auto-play, just load. Only auto-play if it was playing the *same* track logic? 
             // Better behavior: Reset state on track change
@@ -106,6 +109,10 @@ export function ConfigPanel({
 
     const handlePlayAudio = () => {
         if (!assets?.audioUrl) return;
+
+        if (!audioInstanceRef.current) {
+            audioInstanceRef.current = new Audio();
+        }
         const audio = audioInstanceRef.current;
 
         // Ensure source is set (in case it wasn't caught by effect for some reason, though effect should handle it)
@@ -167,8 +174,29 @@ export function ConfigPanel({
                 {/* Left Column: Image Config */}
                 <div className="flex-1 flex flex-col p-4 border-r border-white/10 overflow-y-auto">
                     <div className="flex items-center justify-between mb-2">
-                        <label className="text-xs font-medium text-gray-400">🎨 Image Prompt</label>
-                        {getStatusBadge(assets.promptStatus)}
+                        <div className="flex items-center gap-2">
+                            <label className="text-xs font-medium text-gray-400">🎨 Image Prompt</label>
+                            {getStatusBadge(assets.promptStatus)}
+                        </div>
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onGeneratePrompt();
+                            }}
+                            disabled={assets.promptStatus === 'loading'}
+                            className="text-[10px] px-2 py-1 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 rounded border border-indigo-500/30 transition-all flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="AI 自動優化 Prompt"
+                        >
+                            {assets.promptStatus === 'loading' ? (
+                                <><Spinner size="sm" /> 生成中...</>
+                            ) : (
+                                assets.imagePrompt ? (
+                                    <>🔄 重新生成</>
+                                ) : (
+                                    <>✨ AI 生成</>
+                                )
+                            )}
+                        </button>
                     </div>
 
                     {/* Prompt Preview (Adaptive Height) */}
@@ -189,15 +217,7 @@ export function ConfigPanel({
 
                     {/* Image Buttons */}
                     <div className="space-y-2 mt-auto">
-                        <Button
-                            variant="secondary"
-                            size="sm"
-                            className="w-full"
-                            onClick={onGeneratePrompt}
-                            disabled={assets.promptStatus === 'loading'}
-                        >
-                            ✨ AI 生成 Prompt
-                        </Button>
+
                         <Button
                             variant="primary"
                             size="sm"

@@ -59,6 +59,9 @@ export function TimelineContainer({
     currentPlayTime,
 }: TimelineContainerProps) {
     const containerRef = useRef<HTMLDivElement>(null);
+    const headerRef = useRef<HTMLDivElement>(null);
+
+    const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
 
     // Performance optimization: Memoize timeline calculation
     const timelineSegments = useMemo(
@@ -70,31 +73,77 @@ export function TimelineContainer({
     const totalDuration = timelineSegments.reduce((sum, seg) => sum + seg.duration, 0);
     const totalWidth = totalDuration * LAYOUT_CONSTANTS.PIXELS_PER_SECOND;
 
+    // Reset auto-scroll when play starts
+    useEffect(() => {
+        if (isPlaying) {
+            setAutoScrollEnabled(true);
+        }
+    }, [isPlaying]);
+
+    // Handle manual scroll detection
+    const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+        if (!containerRef.current) return;
+
+        // Sync header scroll
+        if (headerRef.current) {
+            headerRef.current.scrollLeft = e.currentTarget.scrollLeft;
+        }
+    };
+
     // Auto-scroll to follow playhead
     useEffect(() => {
-        if (isPlaying && containerRef.current) {
+        if (isPlaying && autoScrollEnabled && containerRef.current) {
             const playheadPosition = currentPlayTime * LAYOUT_CONSTANTS.PIXELS_PER_SECOND;
             const containerWidth = containerRef.current.clientWidth;
             const scrollLeft = containerRef.current.scrollLeft;
 
-            // Scroll if playhead is near the edge
+            // Scroll if playhead is near the edge (keep it in view)
             if (playheadPosition > scrollLeft + containerWidth - 100) {
                 containerRef.current.scrollTo({
                     left: playheadPosition - 100,
                     behavior: 'smooth',
                 });
+            } else if (playheadPosition < scrollLeft) {
+                // If playhead jumps back (looping or seeking), scroll back
+                containerRef.current.scrollTo({
+                    left: playheadPosition - 20,
+                    behavior: 'smooth',
+                });
             }
         }
-    }, [currentPlayTime, isPlaying]);
+    }, [currentPlayTime, isPlaying, autoScrollEnabled]);
 
     return (
-        <div className="bg-gray-900/50 rounded-xl border border-white/10 overflow-hidden h-full flex flex-col">
+        <div className="bg-gray-900/50 rounded-xl border border-white/10 overflow-hidden h-full flex flex-col relative group">
+            {/* Resume Auto-Scroll Button (Floating) */}
+            {!autoScrollEnabled && isPlaying && (
+                <button
+                    onClick={() => {
+                        // Instantly jump to current playhead
+                        if (containerRef.current) {
+                            const playheadPosition = currentPlayTime * LAYOUT_CONSTANTS.PIXELS_PER_SECOND;
+                            containerRef.current.scrollTo({
+                                left: playheadPosition - 100,
+                                behavior: 'auto', // Instant jump
+                            });
+                        }
+                        setAutoScrollEnabled(true);
+                    }}
+                    className="absolute bottom-4 right-4 z-20 bg-indigo-600 text-white text-xs px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1 hover:bg-indigo-700 transition-colors animate-in fade-in"
+                >
+                    📍 回到播放點
+                </button>
+            )}
+
             {/* Track Labels */}
             <div className="flex border-b border-white/10">
                 <div className="w-20 flex-shrink-0 bg-gray-800/50 p-2 text-xs text-gray-400 font-medium">
                     軌道
                 </div>
-                <div className="flex-1 overflow-hidden">
+                <div
+                    ref={headerRef}
+                    className="flex-1 overflow-hidden relative"
+                >
                     {/* Time ruler placeholder */}
                     <div className="h-8 bg-gray-800/30 flex items-center px-2 text-xs text-gray-500">
                         {Array.from({ length: Math.ceil(totalDuration / 5) }).map((_, i) => (
@@ -130,6 +179,16 @@ export function TimelineContainer({
                     ref={containerRef}
                     className="flex-1 overflow-x-auto relative"
                     style={{ minWidth: 0 }}
+                    onScroll={handleScroll}
+                    onWheel={() => {
+                        if (isPlaying) setAutoScrollEnabled(false);
+                    }}
+                    onTouchMove={() => {
+                        if (isPlaying) setAutoScrollEnabled(false);
+                    }}
+                    onMouseDown={() => {
+                        // If user grabs scrollbar or clicks to drag
+                    }}
                 >
                     <div style={{ width: `${totalWidth}px`, minWidth: '100%' }}>
                         {/* Image Track */}

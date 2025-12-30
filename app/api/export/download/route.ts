@@ -14,9 +14,11 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        // Security: Only allow files from /tmp/cb-export-* directories
+        // Security: Only allow files from /tmp/cb-export-* or /private/tmp/cb-export-* directories
+        // Note: On macOS, /tmp is a symlink to /private/tmp, so we need to allow both
         const normalizedPath = path.normalize(filePath);
-        if (!normalizedPath.startsWith('/tmp/cb-export-')) {
+        if (!normalizedPath.startsWith('/tmp/cb-export-') &&
+            !normalizedPath.startsWith('/private/tmp/cb-export-')) {
             return NextResponse.json(
                 { error: 'Invalid file path' },
                 { status: 403 }
