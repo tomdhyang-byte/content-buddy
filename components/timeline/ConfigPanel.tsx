@@ -2,17 +2,18 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { SegmentAssets, GenerationStatus, PronunciationDictItem } from '@/types';
-import { Button, Spinner, EditModal } from '@/components/ui';
+import { Button, Spinner, EditModal, ConfirmModal } from '@/components/ui';
 
 interface ConfigPanelProps {
     segmentId: string | null;
     segmentIndex: number;
     segmentText: string;
     assets: SegmentAssets | null;
+    onTextChange: (text: string) => void;
     onPromptChange: (prompt: string) => void;
     onGeneratePrompt: () => void;
     onGenerateImage: () => void;
-    onGenerateAudio: () => void;
+    onGenerateAudio: (pronunciationDict?: PronunciationDictItem[]) => void;
     onUpdateDictionary: (items: PronunciationDictItem[]) => void;
     onUpdateVoiceSettings: (key: 'voiceSpeed' | 'voiceEmotion', value: number | string) => void;
 }
@@ -22,6 +23,7 @@ export function ConfigPanel({
     segmentIndex,
     segmentText,
     assets,
+    onTextChange,
     onPromptChange,
     onGeneratePrompt,
     onGenerateImage,
@@ -32,15 +34,22 @@ export function ConfigPanel({
     // Modal states
     const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
     const [editedPrompt, setEditedPrompt] = useState('');
-
-    // Dictionary state
-    const [newDictText, setNewDictText] = useState('');
-    const [newDictPron, setNewDictPron] = useState('');
+    const [isTextModalOpen, setIsTextModalOpen] = useState(false);
+    const [editedText, setEditedText] = useState('');
 
     // Audio player state
-    const audioRef = useRef<HTMLAudioElement | null>(null);
-    const audioInstanceRef = useRef<HTMLAudioElement | null>(null); // Persistent instance
+    const audioInstanceRef = useRef<HTMLAudioElement | null>(null);
     const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+
+    // Global Dictionary Sync states
+    const [globalDictWord, setGlobalDictWord] = useState('');
+    const [globalDictPinyin, setGlobalDictPinyin] = useState('');
+    const [globalDictRowIndex, setGlobalDictRowIndex] = useState<number | null>(null);
+    const [isCheckingWord, setIsCheckingWord] = useState(false);
+    const [isGeneratingPinyin, setIsGeneratingPinyin] = useState(false);
+    const [isSavingDict, setIsSavingDict] = useState(false);
+    const [showOverwriteConfirm, setShowOverwriteConfirm] = useState(false);
+    const [dictSyncMessage, setDictSyncMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
     // Sync prompt from assets
     useEffect(() => {
@@ -50,6 +59,11 @@ export function ConfigPanel({
             setEditedPrompt('');
         }
     }, [assets?.imagePrompt]);
+
+    // Sync text state
+    useEffect(() => {
+        setEditedText(segmentText);
+    }, [segmentText]);
 
     // Handle audio lifecycle
     useEffect(() => {
@@ -92,19 +106,9 @@ export function ConfigPanel({
         onPromptChange(newPrompt);
     };
 
-    const handleAddDictItem = () => {
-        if (!newDictText.trim() || !newDictPron.trim()) return;
-        const currentItems = assets?.customPronunciations || [];
-        onUpdateDictionary([...currentItems, { text: newDictText.trim(), pronunciation: newDictPron.trim() }]);
-        setNewDictText('');
-        setNewDictPron('');
-    };
-
-    const handleDeleteDictItem = (index: number) => {
-        const currentItems = assets?.customPronunciations || [];
-        const newItems = [...currentItems];
-        newItems.splice(index, 1);
-        onUpdateDictionary(newItems);
+    const handleTextSave = (newText: string) => {
+        setEditedText(newText);
+        onTextChange(newText);
     };
 
     const handlePlayAudio = () => {
@@ -124,6 +128,114 @@ export function ConfigPanel({
             audio.pause();
         } else {
             audio.play().catch(console.error);
+        }
+    };
+
+    // Global Dictionary Sync handlers
+    const handleCheckAndGeneratePinyin = async () => {
+        if (!globalDictWord.trim()) return;
+
+        setIsCheckingWord(true);
+        setDictSyncMessage(null);
+
+        try {
+            // Check if word exists
+            const checkRes = await fetch('/api/dictionary/check', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ word: globalDictWord.trim() }),
+            });
+            const checkData = await checkRes.json();
+
+            if (checkData.exists) {
+                // Word exists, ask for overwrite confirmation
+                setGlobalDictRowIndex(checkData.entry.rowIndex);
+                setGlobalDictPinyin(checkData.entry.pinyin);
+                setShowOverwriteConfirm(true);
+                setIsCheckingWord(false);
+                return;
+            }
+
+            // Word doesn't exist, generate pinyin
+            setGlobalDictRowIndex(null);
+            await generatePinyinForWord();
+        } catch (error) {
+            setDictSyncMessage({ type: 'error', text: '檢查字詞失敗' });
+        } finally {
+            setIsCheckingWord(false);
+        }
+    };
+
+    const generatePinyinForWord = async () => {
+        setIsGeneratingPinyin(true);
+        try {
+            const res = await fetch('/api/dictionary/generate-pinyin', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ word: globalDictWord.trim() }),
+            });
+            const data = await res.json();
+            setGlobalDictPinyin(data.pinyin || '');
+        } catch (error) {
+            setDictSyncMessage({ type: 'error', text: 'AI 拼音生成失敗' });
+        } finally {
+            setIsGeneratingPinyin(false);
+        }
+    };
+
+    const handleOverwriteConfirm = async () => {
+        setShowOverwriteConfirm(false);
+        await generatePinyinForWord();
+    };
+
+    const handleSaveToSheetAndRegenerate = async () => {
+        if (!globalDictWord.trim() || !globalDictPinyin.trim()) return;
+
+        setIsSavingDict(true);
+        setDictSyncMessage(null);
+
+        try {
+            // Save to Google Sheet
+            const saveRes = await fetch('/api/dictionary/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    word: globalDictWord.trim(),
+                    pinyin: globalDictPinyin.trim(),
+                    rowIndex: globalDictRowIndex,
+                }),
+            });
+
+            if (!saveRes.ok) {
+                throw new Error('Failed to save');
+            }
+
+            // Add to local dictionary for current segment
+            const currentItems = assets?.customPronunciations || [];
+            const existingIndex = currentItems.findIndex(item => item.text === globalDictWord.trim());
+            if (existingIndex >= 0) {
+                currentItems[existingIndex].pronunciation = globalDictPinyin.trim();
+                onUpdateDictionary([...currentItems]);
+            } else {
+                onUpdateDictionary([...currentItems, { text: globalDictWord.trim(), pronunciation: globalDictPinyin.trim() }]);
+            }
+
+            setDictSyncMessage({ type: 'success', text: '已保存至 Google Sheet！' });
+
+            // Trigger audio regeneration with the updated dictionary
+            const updatedDict = existingIndex >= 0
+                ? currentItems
+                : [...currentItems, { text: globalDictWord.trim(), pronunciation: globalDictPinyin.trim() }];
+            onGenerateAudio(updatedDict);
+
+            // Clear inputs
+            setGlobalDictWord('');
+            setGlobalDictPinyin('');
+            setGlobalDictRowIndex(null);
+        } catch (error) {
+            setDictSyncMessage({ type: 'error', text: '保存失敗' });
+        } finally {
+            setIsSavingDict(false);
         }
     };
 
@@ -163,8 +275,20 @@ export function ConfigPanel({
 
             {/* Script Text Preview (Fixed Height) */}
             <div className="px-4 py-3 border-b border-white/10 flex-shrink-0">
-                <label className="block text-xs font-medium text-gray-400 mb-1.5">📝 文字內容</label>
-                <div className="bg-white/5 rounded-lg p-2.5 text-gray-300 text-sm leading-relaxed h-16 overflow-hidden line-clamp-3">
+                <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-medium text-gray-400">📝 文字內容</label>
+                    <button
+                        className="text-[10px] text-gray-500 hover:text-indigo-400 transition-colors"
+                        onClick={() => setIsTextModalOpen(true)}
+                    >
+                        編輯文字
+                    </button>
+                </div>
+                <div
+                    className="bg-white/5 rounded-lg p-2.5 text-gray-300 text-sm leading-relaxed h-16 overflow-hidden line-clamp-3 hover:bg-white/10 transition-colors cursor-pointer"
+                    onClick={() => setIsTextModalOpen(true)}
+                    title="點擊編輯文字"
+                >
                     {segmentText}
                 </div>
             </div>
@@ -274,48 +398,6 @@ export function ConfigPanel({
                         </select>
                     </div>
 
-                    {/* Pronunciation Dictionary (Compact) */}
-                    <div className="mb-3">
-                        <label className="block text-xs text-gray-500 mb-1">發音字典</label>
-                        <div className="flex gap-1 mb-1">
-                            <input
-                                type="text"
-                                placeholder="文字"
-                                value={newDictText}
-                                onChange={(e) => setNewDictText(e.target.value)}
-                                className="flex-1 bg-white/5 border border-white/20 rounded px-2 py-1 text-white text-xs placeholder-gray-500 focus:outline-none"
-                            />
-                            <input
-                                type="text"
-                                placeholder="拼音"
-                                value={newDictPron}
-                                onChange={(e) => setNewDictPron(e.target.value)}
-                                className="flex-1 bg-white/5 border border-white/20 rounded px-2 py-1 text-white text-xs placeholder-gray-500 focus:outline-none"
-                            />
-                            <button
-                                onClick={handleAddDictItem}
-                                className="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded transition-colors"
-                            >
-                                +
-                            </button>
-                        </div>
-                        {/* Dictionary Items */}
-                        {(assets.customPronunciations || []).length > 0 && (
-                            <div className="space-y-1 max-h-16 overflow-y-auto">
-                                {assets.customPronunciations?.map((item, index) => (
-                                    <div key={index} className="flex items-center justify-between bg-white/5 rounded px-2 py-1 text-xs">
-                                        <span className="text-gray-300">{item.text} → {item.pronunciation}</span>
-                                        <button
-                                            onClick={() => handleDeleteDictItem(index)}
-                                            className="text-gray-500 hover:text-red-400"
-                                        >
-                                            ✕
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
 
                     {/* Audio Generate & Preview */}
                     <div className="mt-auto space-y-2">
@@ -323,7 +405,7 @@ export function ConfigPanel({
                             variant="primary"
                             size="sm"
                             className="w-full"
-                            onClick={onGenerateAudio}
+                            onClick={() => onGenerateAudio()}
                             disabled={assets.audioStatus === 'loading'}
                         >
                             {assets.audioStatus === 'loading' ? (
@@ -340,6 +422,70 @@ export function ConfigPanel({
                                 {isAudioPlaying ? '⏸️ 暫停' : '▶️ 播放語音'}
                             </button>
                         )}
+
+                        {/* Global Pronunciation Fix Section */}
+                        <div className="mt-4 pt-4 border-t border-white/10">
+                            <label className="block text-xs font-medium text-gray-400 mb-2">📖 發音修正（同步至 Google Sheet）</label>
+
+                            {/* Word Input */}
+                            <div className="flex gap-1 mb-2">
+                                <input
+                                    type="text"
+                                    placeholder="輸入字詞"
+                                    value={globalDictWord}
+                                    onChange={(e) => setGlobalDictWord(e.target.value)}
+                                    className="flex-1 bg-white/5 border border-white/20 rounded px-2 py-1.5 text-white text-xs placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
+                                />
+                                <button
+                                    onClick={handleCheckAndGeneratePinyin}
+                                    disabled={isCheckingWord || isGeneratingPinyin || !globalDictWord.trim()}
+                                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                                >
+                                    {isCheckingWord || isGeneratingPinyin ? (
+                                        <><Spinner size="sm" /> 處理中...</>
+                                    ) : (
+                                        '✨ AI 生成'
+                                    )}
+                                </button>
+                            </div>
+
+                            {/* Pinyin Result */}
+                            {globalDictPinyin && (
+                                <div className="mb-2">
+                                    <label className="block text-[10px] text-gray-500 mb-1">拼音結果（可編輯）</label>
+                                    <input
+                                        type="text"
+                                        value={globalDictPinyin}
+                                        onChange={(e) => setGlobalDictPinyin(e.target.value)}
+                                        className="w-full bg-white/5 border border-white/20 rounded px-2 py-1.5 text-white text-xs font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
+                                    />
+                                </div>
+                            )}
+
+                            {/* Save Button */}
+                            {globalDictPinyin && (
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    className="w-full"
+                                    onClick={handleSaveToSheetAndRegenerate}
+                                    disabled={isSavingDict}
+                                >
+                                    {isSavingDict ? (
+                                        <><Spinner size="sm" /> 保存中...</>
+                                    ) : (
+                                        '📤 保存至 Sheet 並重新生成語音'
+                                    )}
+                                </Button>
+                            )}
+
+                            {/* Status Message */}
+                            {dictSyncMessage && (
+                                <p className={`text-[10px] mt-1 ${dictSyncMessage.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+                                    {dictSyncMessage.text}
+                                </p>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -352,6 +498,28 @@ export function ConfigPanel({
                 onChange={handlePromptSave}
                 onClose={() => setIsPromptModalOpen(false)}
                 placeholder="輸入或編輯用於生成圖片的 Prompt..."
+            />
+
+            {/* Edit Modal for Text */}
+            <EditModal
+                isOpen={isTextModalOpen}
+                title="編輯段落文字"
+                value={editedText}
+                onChange={handleTextSave}
+                onClose={() => setIsTextModalOpen(false)}
+                placeholder="輸入段落文字..."
+                rows={6}
+            />
+
+            {/* Overwrite Confirm Modal */}
+            <ConfirmModal
+                isOpen={showOverwriteConfirm}
+                onClose={() => setShowOverwriteConfirm(false)}
+                onConfirm={handleOverwriteConfirm}
+                title="字詞已存在"
+                message={`「${globalDictWord}」已存在於字典中（拼音：${globalDictPinyin}）。是否要重新生成拼音並覆蓋？`}
+                confirmText="重新生成"
+                cancelText="取消"
             />
         </div>
     );

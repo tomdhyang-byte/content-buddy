@@ -20,6 +20,8 @@ export default function ReviewPage() {
         initializeAssets,
         clearGeneratedAssets,
         setCurrentStep,
+        updateSegmentText,
+        setPlaybackRate,
     } = useProject();
 
     const [showBackModal, setShowBackModal] = useState(false);
@@ -108,11 +110,14 @@ export default function ReviewPage() {
         }
     };
 
-    const generateAudioForSegment = async (segmentId: string, text: string) => {
+    const generateAudioForSegment = async (segmentId: string, text: string, pronunciationDictOverride?: PronunciationDictItem[]) => {
         updateAssetStatus(segmentId, 'audioStatus', 'loading');
 
         // Get current assets for this segment
         const segmentAssets = state.generatedAssets.get(segmentId);
+
+        // Use override if provided, otherwise read from state
+        const pronunciationDict = pronunciationDictOverride ?? segmentAssets?.customPronunciations ?? [];
 
         try {
             const response = await fetch('/api/generate/audio', {
@@ -122,7 +127,7 @@ export default function ReviewPage() {
                     segmentId,
                     text,
                     voiceId: state.voiceId,
-                    pronunciationDict: segmentAssets?.customPronunciations || [],
+                    pronunciationDict,
                     speed: segmentAssets?.voiceSpeed || 1.2,
                     emotion: segmentAssets?.voiceEmotion || 'neutral',
                 }),
@@ -154,11 +159,11 @@ export default function ReviewPage() {
         }
     }, [selectedSegmentId, state.generatedAssets]);
 
-    const handleGenerateAudio = useCallback(() => {
+    const handleGenerateAudio = useCallback((pronunciationDict?: PronunciationDictItem[]) => {
         if (selectedSegmentId) {
             const segment = state.segments.find(s => s.id === selectedSegmentId);
             if (segment) {
-                generateAudioForSegment(selectedSegmentId, segment.text);
+                generateAudioForSegment(selectedSegmentId, segment.text, pronunciationDict);
             }
         }
     }, [selectedSegmentId, state.segments, state.generatedAssets]);
@@ -221,6 +226,13 @@ export default function ReviewPage() {
         setShowBackModal(false);
         setCurrentStep(2);
         router.push('/slice');
+    };
+
+    const togglePlaybackRate = () => {
+        const rates = [0.5, 1, 1.25, 1.5, 2];
+        const currentIndex = rates.indexOf(state.playbackRate);
+        const nextRate = rates[(currentIndex + 1) % rates.length];
+        setPlaybackRate(nextRate);
     };
 
 
@@ -298,7 +310,7 @@ export default function ReviewPage() {
                 {/* Top Row: Preview + Config (Equal Heights) */}
                 <div className="flex-1 min-h-0 flex gap-4">
                     {/* Left: Preview Player (16:9 handled internally by PreviewPlayer) */}
-                    <div className="flex-[1.5] min-w-0">
+                    <div className="flex-[1.5] min-w-0 relative">
                         <PreviewPlayer
                             segments={timelineSegments}
                             isPlaying={isPlaying}
@@ -309,7 +321,22 @@ export default function ReviewPage() {
                             onBatchGenerate={handleBatchGenerate}
                             isBatchGenerating={isBatchGenerating}
                             onSegmentChange={setSelectedSegmentId}
+                            playbackRate={state.playbackRate}
                         />
+
+                        {/* Speed Control Overlay (Bottom Right of Preview Area) */}
+                        <div className="absolute bottom-4 right-4 z-10">
+                            <button
+                                onClick={togglePlaybackRate}
+                                className="bg-black/60 hover:bg-black/80 backdrop-blur-md text-white text-xs font-medium px-3 py-1.5 rounded-full border border-white/10 transition-all flex items-center gap-1"
+                                title="調整播放倍速"
+                            >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                </svg>
+                                {state.playbackRate}x
+                            </button>
+                        </div>
                     </div>
 
                     {/* Right: Config Panel */}
@@ -319,6 +346,11 @@ export default function ReviewPage() {
                             segmentIndex={selectedSegmentIndex}
                             segmentText={selectedSegment?.text || ''}
                             assets={selectedAssets}
+                            onTextChange={(text) => {
+                                if (selectedSegmentId) {
+                                    updateSegmentText(selectedSegmentId, text);
+                                }
+                            }}
                             onPromptChange={handlePromptChange}
                             onGeneratePrompt={() => {
                                 if (selectedSegmentId && selectedSegment) {

@@ -32,6 +32,7 @@ const initialState: ProjectState = {
     generatedAssets: new Map(),
     heygen: createEmptyHeygenState(),
     currentStep: 1,
+    playbackRate: 1,
 };
 
 // Actions
@@ -51,6 +52,7 @@ type Action =
     | { type: 'SET_HEYGEN_VIDEO'; payload: File }
     | { type: 'CLEAR_HEYGEN' }
     | { type: 'SET_CURRENT_STEP'; payload: 1 | 2 | 3 | 4 | 5 }
+    | { type: 'SET_PLAYBACK_RATE'; payload: number }
     | { type: 'RESET_PROJECT' };
 
 // Reducer
@@ -166,6 +168,8 @@ function projectReducer(state: ProjectState, action: Action): ProjectState {
             return { ...state, heygen: createEmptyHeygenState() };
         case 'SET_CURRENT_STEP':
             return { ...state, currentStep: action.payload };
+        case 'SET_PLAYBACK_RATE':
+            return { ...state, playbackRate: action.payload };
         case 'RESET_PROJECT':
             return initialState;
         default:
@@ -191,6 +195,7 @@ interface ProjectContextType {
     setHeygenVideo: (file: File) => void;
     clearHeygen: () => void;
     setCurrentStep: (step: 1 | 2 | 3 | 4 | 5) => void;
+    setPlaybackRate: (rate: number) => void;
     resetProject: () => void;
 }
 
@@ -215,6 +220,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     const setHeygenVideo = useCallback((file: File) => dispatch({ type: 'SET_HEYGEN_VIDEO', payload: file }), []);
     const clearHeygen = useCallback(() => dispatch({ type: 'CLEAR_HEYGEN' }), []);
     const setCurrentStep = useCallback((step: 1 | 2 | 3 | 4 | 5) => dispatch({ type: 'SET_CURRENT_STEP', payload: step }), []);
+    const setPlaybackRate = useCallback((rate: number) => dispatch({ type: 'SET_PLAYBACK_RATE', payload: rate }), []);
     const resetProject = useCallback(() => dispatch({ type: 'RESET_PROJECT' }), []);
 
     const value: ProjectContextType = {
@@ -234,6 +240,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         setHeygenVideo,
         clearHeygen,
         setCurrentStep,
+        setPlaybackRate,
         resetProject,
     };
 

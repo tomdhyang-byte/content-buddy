@@ -187,7 +187,7 @@ export function TimelineContainer({
                         if (isPlaying) setAutoScrollEnabled(false);
                     }}
                     onMouseDown={() => {
-                        // If user grabs scrollbar or clicks to drag
+                        if (isPlaying) setAutoScrollEnabled(false);
                     }}
                 >
                     <div style={{ width: `${totalWidth}px`, minWidth: '100%' }}>

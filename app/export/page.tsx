@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useProject } from '@/context/ProjectContext';
 import { Button, Card, Spinner } from '@/components/ui';
+import JSZip from 'jszip';
 
 type JobStatus = 'idle' | 'uploading' | 'processing' | 'completed' | 'failed';
 
@@ -12,6 +13,7 @@ interface JobState {
     status: JobStatus;
     message: string;
     outputFilePath: string | null;
+    folderPath: string | null;
     error: string | null;
 }
 
@@ -25,6 +27,7 @@ export default function ExportPage() {
         status: 'idle',
         message: '',
         outputFilePath: null,
+        folderPath: null,
         error: null,
     });
 
@@ -40,6 +43,13 @@ export default function ExportPage() {
         };
     }, []);
 
+    // Auto-download when export completes
+    useEffect(() => {
+        if (jobState.status === 'completed' && jobState.outputFilePath) {
+            triggerDownload(jobState.outputFilePath);
+        }
+    }, [jobState.status, jobState.outputFilePath]);
+
     // Redirect if no segments or no heygen video
     useEffect(() => {
         if (state.segments.length === 0) {
@@ -54,12 +64,18 @@ export default function ExportPage() {
             const data = await response.json();
 
             if (data.status === 'completed') {
-                setJobState(prev => ({
-                    ...prev,
-                    status: 'completed',
-                    message: '影片處理完成！',
-                    outputFilePath: data.outputFilePath,
-                }));
+                setJobState(prev => {
+                    // AutoVideoMaker outputs to: {folderPath}_output.mp4 (not inside the folder)
+                    // e.g. /tmp/cb-export-xxx_output.mp4
+                    const fallbackPath = prev.folderPath ? `${prev.folderPath}_output.mp4` : null;
+
+                    return {
+                        ...prev,
+                        status: 'completed' as const,
+                        message: '影片處理完成！',
+                        outputFilePath: data.outputFilePath || fallbackPath,
+                    };
+                });
 
                 // Stop polling
                 if (pollingRef.current) {
@@ -67,10 +83,6 @@ export default function ExportPage() {
                     pollingRef.current = null;
                 }
 
-                // Auto-download
-                if (data.outputFilePath) {
-                    triggerDownload(data.outputFilePath);
-                }
 
             } else if (data.status === 'failed') {
                 setJobState(prev => ({
@@ -112,6 +124,56 @@ export default function ExportPage() {
         document.body.removeChild(link);
     };
 
+    // Export assets as ZIP (for manual AutoVideoMaker processing)
+    const handleExportAssets = async () => {
+        try {
+            const zip = new JSZip();
+
+            // 1. Add images and audio (1.jpg, 1.mp3, 2.jpg, 2.mp3, ...)
+            for (let i = 0; i < state.segments.length; i++) {
+                const segment = state.segments[i];
+                const assets = state.generatedAssets.get(segment.id);
+                const index = i + 1;
+
+                // Add image
+                if (assets?.imageUrl && assets.imageUrl.startsWith('data:')) {
+                    const base64Data = assets.imageUrl.split(',')[1];
+                    zip.file(`${index}.jpg`, base64Data, { base64: true });
+                }
+
+                // Add audio
+                if (assets?.audioUrl && assets.audioUrl.startsWith('data:')) {
+                    const base64Data = assets.audioUrl.split(',')[1];
+                    zip.file(`${index}.mp3`, base64Data, { base64: true });
+                }
+            }
+
+            // 2. Add full_script.txt
+            const fullScript = state.segments.map(s => s.text).join('\n\n');
+            zip.file('full_script.txt', fullScript);
+
+            // 3. Add avatar_full.mp4
+            if (state.heygen.heygenVideoFile) {
+                const avatarBuffer = await state.heygen.heygenVideoFile.arrayBuffer();
+                zip.file('avatar_full.mp4', avatarBuffer);
+            }
+
+            // Generate and download ZIP
+            const blob = await zip.generateAsync({ type: 'blob' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'content_buddy_assets.zip';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Export assets error:', error);
+            alert('匹出素材失敗，請重試');
+        }
+    };
+
     // Handle export
     const handleExport = async () => {
         if (!state.heygen.heygenVideoFile) {
@@ -128,6 +190,7 @@ export default function ExportPage() {
             status: 'uploading',
             message: '正在上傳素材...',
             outputFilePath: null,
+            folderPath: null,
             error: null,
         });
 
@@ -135,7 +198,8 @@ export default function ExportPage() {
             // Prepare form data
             const formData = new FormData();
             formData.append('avatarVideo', state.heygen.heygenVideoFile);
-            formData.append('script', state.script);
+            // Use edited segment texts, concatenated without separators
+            formData.append('script', state.segments.map(s => s.text).join(''));
             formData.append('skipSubtitle', 'false');
 
             // Prepare segments data
@@ -167,6 +231,7 @@ export default function ExportPage() {
                 ...prev,
                 jobId: data.jobId,
                 status: 'processing',
+                folderPath: data.folderPath,
                 message: '影片處理中...',
             }));
 
@@ -200,6 +265,7 @@ export default function ExportPage() {
             status: 'idle',
             message: '',
             outputFilePath: null,
+            folderPath: null,
             error: null,
         });
     };
@@ -335,9 +401,23 @@ export default function ExportPage() {
                                 </p>
                             )}
                             <div className="flex flex-col gap-4 max-w-xs mx-auto">
+                                {jobState.outputFilePath && (
+                                    <Button
+                                        variant="primary"
+                                        onClick={() => triggerDownload(jobState.outputFilePath!)}
+                                    >
+                                        📥 下載影片
+                                    </Button>
+                                )}
                                 <Button variant="secondary" onClick={handleStartNew}>
                                     開始新專案
                                 </Button>
+                                <button
+                                    onClick={handleExportAssets}
+                                    className="text-sm text-gray-500 hover:text-gray-300 underline transition-colors"
+                                >
+                                    影片有問題？點我先匯出素材
+                                </button>
                             </div>
                         </div>
 

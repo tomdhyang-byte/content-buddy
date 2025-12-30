@@ -71,6 +71,9 @@ export interface ProjectState {
 
   // Navigation state
   currentStep: 1 | 2 | 3 | 4 | 5;
+
+  // Global settings
+  playbackRate: number;
 }
 
 // API Request/Response types

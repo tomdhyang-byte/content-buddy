@@ -10,6 +10,7 @@ interface EditModalProps {
     onChange: (value: string) => void;
     onClose: () => void;
     placeholder?: string;
+    rows?: number;
 }
 
 export function EditModal({
@@ -19,6 +20,7 @@ export function EditModal({
     onChange,
     onClose,
     placeholder = '輸入內容...',
+    rows = 12,
 }: EditModalProps) {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -71,7 +73,8 @@ export function EditModal({
                         value={value}
                         onChange={(e) => onChange(e.target.value)}
                         placeholder={placeholder}
-                        className="w-full h-80 bg-white/5 border border-white/20 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none text-sm leading-relaxed"
+                        rows={rows}
+                        className="w-full bg-white/5 border border-white/20 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none text-sm leading-relaxed"
                     />
                 </div>
 

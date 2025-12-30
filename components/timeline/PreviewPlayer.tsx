@@ -13,6 +13,7 @@ interface PreviewPlayerProps {
     onBatchGenerate: () => void;
     isBatchGenerating: boolean;
     onSegmentChange?: (segmentId: string) => void;
+    playbackRate: number;
 }
 
 export function PreviewPlayer({
@@ -25,6 +26,7 @@ export function PreviewPlayer({
     onBatchGenerate,
     isBatchGenerating,
     onSegmentChange,
+    playbackRate,
 }: PreviewPlayerProps) {
     const audioRef = useRef<HTMLAudioElement>(null);
     const animationFrameRef = useRef<number | null>(null);
@@ -82,12 +84,22 @@ export function PreviewPlayer({
                 audio.play().catch(console.error);
             }
 
+            // Apply playback rate
+            audio.playbackRate = playbackRate;
+
             // Notify parent about segment change for UI sync
             if (onSegmentChange && currentSegment) {
                 onSegmentChange(currentSegment.id);
             }
         }
-    }, [currentSegmentIndex, currentSegment, isPlaying, onSegmentChange]);
+    }, [currentSegmentIndex, currentSegment, isPlaying, onSegmentChange, playbackRate]);
+
+    // Handle playback rate changes
+    useEffect(() => {
+        if (audioRef.current) {
+            audioRef.current.playbackRate = playbackRate;
+        }
+    }, [playbackRate]);
 
     // Handle play/pause state changes
     useEffect(() => {
