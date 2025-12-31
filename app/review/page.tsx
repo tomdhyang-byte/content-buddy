@@ -178,14 +178,22 @@ export default function ReviewPage() {
                 currentPrompt = await generatePromptForSegment(segment.id, segment.text);
             }
 
+            // Parallelize Image and Audio generation
+            const tasks: Promise<void>[] = [];
+
             // 2. Generate Image if missing (and we have a prompt)
             if (currentPrompt && !assets?.imageUrl) {
-                await generateImageForSegment(segment.id, currentPrompt);
+                tasks.push(generateImageForSegment(segment.id, currentPrompt));
             }
 
             // 3. Generate Audio if missing
             if (!assets?.audioUrl) {
-                await generateAudioForSegment(segment.id, segment.text);
+                tasks.push(generateAudioForSegment(segment.id, segment.text));
+            }
+
+            // Execute tasks in parallel
+            if (tasks.length > 0) {
+                await Promise.all(tasks);
             }
         } catch (error) {
             console.error(`Error processing segment ${segment.id}`, error);

@@ -107,38 +107,59 @@ export default function HeygenPage() {
         }
     }, [state.segments, state.generatedAssets, setMergedAudio]);
 
-    // Download ZIP with all audio files
-    const handleDownloadZip = useCallback(async () => {
+    // Export all assets as ZIP (images, audio, script, avatar video)
+    const handleExportAssets = useCallback(async () => {
         setIsZipping(true);
 
         try {
             const zip = new JSZip();
 
+            // 1. Add images and audio (1.jpg, 1.mp3, 2.jpg, 2.mp3, ...)
             for (let i = 0; i < state.segments.length; i++) {
                 const segment = state.segments[i];
                 const assets = state.generatedAssets.get(segment.id);
+                const index = i + 1;
 
-                if (assets?.audioUrl) {
-                    const response = await fetch(assets.audioUrl);
-                    const blob = await response.blob();
-                    const fileName = `${String(i + 1).padStart(2, '0')}_${segment.id}.mp3`;
-                    zip.file(fileName, blob);
+                // Add image
+                if (assets?.imageUrl && assets.imageUrl.startsWith('data:')) {
+                    const base64Data = assets.imageUrl.split(',')[1];
+                    zip.file(`${index}.jpg`, base64Data, { base64: true });
+                }
+
+                // Add audio
+                if (assets?.audioUrl && assets.audioUrl.startsWith('data:')) {
+                    const base64Data = assets.audioUrl.split(',')[1];
+                    zip.file(`${index}.mp3`, base64Data, { base64: true });
                 }
             }
 
-            const content = await zip.generateAsync({ type: 'blob' });
-            const url = URL.createObjectURL(content);
+            // 2. Add full_script.txt
+            const fullScript = state.segments.map(s => s.text).join('\n\n');
+            zip.file('full_script.txt', fullScript);
+
+            // 3. Add avatar_full.mp4 if available
+            if (state.heygen.heygenVideoFile) {
+                const avatarBuffer = await state.heygen.heygenVideoFile.arrayBuffer();
+                zip.file('avatar_full.mp4', avatarBuffer);
+            }
+
+            // Generate and download ZIP
+            const blob = await zip.generateAsync({ type: 'blob' });
+            const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = 'audio_segments.zip';
+            link.download = 'content_buddy_assets.zip';
+            document.body.appendChild(link);
             link.click();
+            document.body.removeChild(link);
             URL.revokeObjectURL(url);
         } catch (error) {
-            console.error('Failed to create ZIP:', error);
+            console.error('Failed to export assets:', error);
+            alert('匯出素材失敗，請重試');
         } finally {
             setIsZipping(false);
         }
-    }, [state.segments, state.generatedAssets]);
+    }, [state.segments, state.generatedAssets, state.heygen.heygenVideoFile]);
 
     // Handle video file upload
     const handleVideoUpload = (file: File) => {
@@ -299,12 +320,12 @@ export default function HeygenPage() {
                             )}
                         </div>
 
-                        {/* Option 2: Download ZIP */}
+                        {/* Option 2: Download All Assets */}
                         <div className="bg-white/5 rounded-xl p-4">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <h4 className="text-white font-medium">選項 2：下載 ZIP</h4>
-                                    <p className="text-gray-400 text-sm">下載所有分段音頻，自己在剪映合併</p>
+                                    <h4 className="text-white font-medium">選項 2：下載所有素材</h4>
+                                    <p className="text-gray-400 text-sm">下載圖片、音頻、腳本（避免資料遺失）</p>
                                 </div>
                                 {isZipping ? (
                                     <Spinner size="sm" />
@@ -312,10 +333,10 @@ export default function HeygenPage() {
                                     <Button
                                         variant="secondary"
                                         size="sm"
-                                        onClick={handleDownloadZip}
-                                        disabled={audioCount === 0}
+                                        onClick={handleExportAssets}
+                                        disabled={state.segments.length === 0}
                                     >
-                                        下載 ZIP
+                                        下載素材
                                     </Button>
                                 )}
                             </div>

@@ -482,7 +482,7 @@ export default function ExportPage() {
                                 onClick={handleExport}
                                 disabled={!hasHeygenVideo}
                             >
-                                🎬 匯出影片
+                                🎬 點擊開始生成影片
                             </Button>
                         </div>
                     )}
