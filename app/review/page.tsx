@@ -159,16 +159,35 @@ export default function ReviewPage() {
         }
     }, [selectedSegmentId, state.generatedAssets]);
 
-    const handleGenerateAudio = useCallback((pronunciationDict?: PronunciationDictItem[]) => {
+    const handleGenerateAudio = useCallback(async (pronunciationDictOverride?: PronunciationDictItem[]) => {
         if (selectedSegmentId) {
             const segment = state.segments.find(s => s.id === selectedSegmentId);
             if (segment) {
-                generateAudioForSegment(selectedSegmentId, segment.text, pronunciationDict);
+                // If no override provided, fetch global dictionary and merge with segment custom pronunciations
+                let finalDict = pronunciationDictOverride;
+                if (!finalDict) {
+                    try {
+                        const res = await fetch('/api/dictionary/all');
+                        const data = await res.json();
+                        const globalDict: PronunciationDictItem[] = data.pronunciationDict || [];
+                        const segmentAssets = state.generatedAssets.get(selectedSegmentId);
+                        const segmentCustomDict = segmentAssets?.customPronunciations || [];
+                        // Merge: segment custom overrides global (use Map for deduplication)
+                        const dictMap = new Map<string, PronunciationDictItem>();
+                        globalDict.forEach(item => dictMap.set(item.text, item));
+                        segmentCustomDict.forEach(item => dictMap.set(item.text, item));
+                        finalDict = Array.from(dictMap.values());
+                    } catch (error) {
+                        console.error('Failed to fetch global dictionary:', error);
+                        finalDict = [];
+                    }
+                }
+                generateAudioForSegment(selectedSegmentId, segment.text, finalDict);
             }
         }
     }, [selectedSegmentId, state.segments, state.generatedAssets]);
 
-    const processSegment = async (segment: Segment) => {
+    const processSegment = async (segment: Segment, globalDict: PronunciationDictItem[]) => {
         try {
             const assets = state.generatedAssets.get(segment.id);
             let currentPrompt = assets?.imagePrompt;
@@ -188,7 +207,13 @@ export default function ReviewPage() {
 
             // 3. Generate Audio if missing
             if (!assets?.audioUrl) {
-                tasks.push(generateAudioForSegment(segment.id, segment.text));
+                // Merge global dict with segment custom pronunciations
+                const segmentCustomDict = assets?.customPronunciations || [];
+                const dictMap = new Map<string, PronunciationDictItem>();
+                globalDict.forEach(item => dictMap.set(item.text, item));
+                segmentCustomDict.forEach(item => dictMap.set(item.text, item));
+                const mergedDict = Array.from(dictMap.values());
+                tasks.push(generateAudioForSegment(segment.id, segment.text, mergedDict));
             }
 
             // Execute tasks in parallel
@@ -206,8 +231,18 @@ export default function ReviewPage() {
         if (isBatchGenerating) return;
         setIsBatchGenerating(true);
 
+        // Fetch global dictionary once before processing all segments
+        let globalDict: PronunciationDictItem[] = [];
+        try {
+            const res = await fetch('/api/dictionary/all');
+            const data = await res.json();
+            globalDict = data.pronunciationDict || [];
+        } catch (error) {
+            console.error('Failed to fetch global dictionary:', error);
+        }
+
         // Process ALL segments concurrently for maximum speed
-        await Promise.all(state.segments.map(segment => processSegment(segment)));
+        await Promise.all(state.segments.map(segment => processSegment(segment, globalDict)));
 
         setIsBatchGenerating(false);
     };
