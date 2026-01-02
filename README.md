@@ -67,6 +67,22 @@ npm run dev
 
 請確保 AutoVideoMaker API 服務已在 `http://127.0.0.1:8000` 運行，否則 Step 5 匯出功能將無法使用。
 
+### 🔄 如何更新
+
+當有新版本發佈時，請執行以下指令來更新本地環境：
+
+**macOS / Linux / Git Bash:**
+```bash
+git pull && npm install && npm run dev
+```
+
+**Windows (PowerShell):**
+```powershell
+git pull; npm install; npm run dev
+```
+
+*註：如果遇到權限問題，請嘗試分開執行上述三個指令。*
+
 ## 📂 專案結構
 
 詳細代碼結構與模組關係請參考 [CODE_STRUCTURE.md](./CODE_STRUCTURE.md)。
