@@ -109,7 +109,7 @@ function projectReducer(state: ProjectState, action: Action): ProjectState {
             if (!firstText || !secondText) return state;
 
             const firstSegment: Segment = { id: segment.id, text: firstText };
-            const secondSegment: Segment = { id: `${segment.id}_split`, text: secondText };
+            const secondSegment: Segment = { id: `${segment.id}_${Date.now()}`, text: secondText };
 
             const newSegments = [
                 ...state.segments.slice(0, index),

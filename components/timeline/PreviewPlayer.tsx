@@ -73,6 +73,14 @@ export function PreviewPlayer({
 
     // Handle segment change: Reset and load new audio
     useEffect(() => {
+        console.log('[PreviewPlayer] Segment Change Effect', {
+            currentSegmentIndex,
+            lastSegmentIndex: lastSegmentIndexRef.current,
+            audioUrl: currentSegment?.assets.audioUrl?.slice(-30),
+            lastAudioUrl: lastAudioUrlRef.current?.slice(-30),
+            isPlaying
+        });
+
         if (!audioRef.current || !currentSegment?.assets.audioUrl) return;
 
         const currentAudioUrl = currentSegment.assets.audioUrl;
@@ -82,6 +90,8 @@ export function PreviewPlayer({
         const hasUrlChanged = lastAudioUrlRef.current !== currentAudioUrl;
 
         if (hasSegmentChanged || hasUrlChanged) {
+            console.log('[PreviewPlayer] Switching audio source', { hasSegmentChanged, hasUrlChanged });
+
             // Update refs
             lastSegmentIndexRef.current = currentSegmentIndex;
             lastAudioUrlRef.current = currentAudioUrl;
@@ -105,7 +115,13 @@ export function PreviewPlayer({
             // Here we just ensure we respond to the prop change.
 
             if (isPlaying) {
-                audio.play().catch(console.error);
+                console.log('[PreviewPlayer] Auto-playing new segment audio');
+                audio.play().catch((e) => {
+                    // AbortError is expected if pause() is called before play() completes
+                    if (e.name !== 'AbortError') {
+                        console.error('Audio play error:', e);
+                    }
+                });
             }
 
             // Apply playback rate
@@ -161,7 +177,11 @@ export function PreviewPlayer({
 
         if (isPlaying) {
             if (audioRef.current.paused && audioRef.current.src) {
-                audioRef.current.play().catch(console.error);
+                audioRef.current.play().catch((e) => {
+                    if (e.name !== 'AbortError') {
+                        console.error('Audio play error:', e);
+                    }
+                });
             }
         } else {
             audioRef.current.pause();
@@ -203,33 +223,82 @@ export function PreviewPlayer({
 
     const [waitingForNextSegment, setWaitingForNextSegment] = React.useState(false);
 
-    // Derived: Current segment is ready if assets exist
-    const currentReady = currentSegment?.assets.imageStatus === 'success' && currentSegment?.assets.audioStatus === 'success';
+    // Derived: Current segment is ready if assets exist (Relaxed to Audio only for playback continuity)
+    const currentReady = currentSegment?.assets.audioStatus === 'success';
+
+    // Track currentTime in ref to access inside stable callback without re-binding
+    const currentTimeRef = useRef(currentTime);
+    useEffect(() => {
+        currentTimeRef.current = currentTime;
+    }, [currentTime]);
+
+    // Track last auto-advance time to prevent double-handling 'ended' events
+    const lastAdvanceTimeRef = useRef(0);
 
     // Handle audio end - notify parent to advance or wait
     const handleAudioEnd = useCallback(() => {
-        if (currentSegmentIndex < segments.length - 1) {
-            const nextSegment = segments[currentSegmentIndex + 1];
-            const nextReady = nextSegment.assets.imageStatus === 'success' && nextSegment.assets.audioStatus === 'success';
+        const now = Date.now();
+        // Ignore 'ended' events if we just advanced (debounce 500ms)
+        if (now - lastAdvanceTimeRef.current < 500) {
+            console.log('[PreviewPlayer] Ignoring ended event due to recent advance');
+            return;
+        }
+
+        console.log('[PreviewPlayer] Audio ended', {
+            currentSegmentIndex,
+            totalSegments: segments.length,
+            isPlaying,
+            currentTime: currentTimeRef.current,
+            segmentStartTime
+        });
+
+        let finishedSegmentIndex = currentSegmentIndex;
+
+        // Drift detection:
+        // If the 'ended' event fires but we have already advanced to the start of the Next segment
+        // (due to audio duration being slightly longer than metadata duration),
+        // we should attribute this event to the Previous segment.
+        const timeInCurrentSegment = currentTimeRef.current - segmentStartTime;
+        if (timeInCurrentSegment < 0.5 && currentSegmentIndex > 0) {
+            console.log('[PreviewPlayer] Drift detected: attributing ended event to previous segment');
+            finishedSegmentIndex = currentSegmentIndex - 1;
+        }
+
+        if (finishedSegmentIndex < segments.length - 1) {
+            const nextSegmentIndex = finishedSegmentIndex + 1;
+            const nextSegment = segments[nextSegmentIndex];
+            // Relaxed check: Only need Audio to advance
+            const nextReady = nextSegment.assets.audioStatus === 'success';
 
             if (nextReady) {
                 // Next segment is ready, advance immediately
+                // We calculate start time of Next segment.
+                // If we drifted, we might already be there, but setting it explicitly ensures alignment.
+                // Add tiny epsilon to ensure we land IN the next segment
                 const nextStartTime = segments
-                    .slice(0, currentSegmentIndex + 1)
-                    .reduce((sum, seg) => sum + seg.duration, 0);
+                    .slice(0, nextSegmentIndex)
+                    .reduce((sum, seg) => sum + seg.duration, 0) + 0.01;
+
+                console.log('[PreviewPlayer] Advancing to segment', nextSegmentIndex, 'at', nextStartTime);
+                lastAdvanceTimeRef.current = Date.now(); // Mark advance time
                 onTimeUpdate(nextStartTime);
+
+                // Ensure we are playing
+                if (!isPlaying) onPlayStateChange(true);
             } else {
                 // Next segment not ready, enter wait state
+                console.log('[PreviewPlayer] Next segment not ready, waiting...');
                 setWaitingForNextSegment(true);
                 onPlayStateChange(false);
             }
         } else {
             // All segments finished
+            console.log('[PreviewPlayer] All segments finished');
             onPlayStateChange(false);
             onPlayComplete();
             onTimeUpdate(0);
         }
-    }, [currentSegmentIndex, segments, onTimeUpdate, onPlayStateChange, onPlayComplete]);
+    }, [currentSegmentIndex, segments, onTimeUpdate, onPlayStateChange, onPlayComplete, isPlaying, segmentStartTime]);
 
     // Effect: Watch for next segment becoming ready while waiting
     useEffect(() => {
@@ -238,14 +307,15 @@ export function PreviewPlayer({
         const nextSegment = segments[currentSegmentIndex + 1];
         if (!nextSegment) return;
 
-        const nextReady = nextSegment.assets.imageStatus === 'success' && nextSegment.assets.audioStatus === 'success';
+        // Relaxed check: Resume as soon as Audio is ready
+        const nextReady = nextSegment.assets.audioStatus === 'success';
 
         if (nextReady) {
             // Next segment is now ready! Resume playback.
             setWaitingForNextSegment(false);
             const nextStartTime = segments
                 .slice(0, currentSegmentIndex + 1)
-                .reduce((sum, seg) => sum + seg.duration, 0);
+                .reduce((sum, seg) => sum + seg.duration, 0) + 0.01; // Add epsilon
             onTimeUpdate(nextStartTime);
             onPlayStateChange(true);
         }
@@ -264,8 +334,8 @@ export function PreviewPlayer({
     }, [handleAudioEnd]);
 
     const handlePlayPause = () => {
-        // Can play if current segment is ready (don't need allReady anymore)
-        if (!currentReady) return;
+        // Allow pause even if not ready
+        if (!isPlaying && !currentReady) return;
         onPlayStateChange(!isPlaying);
     };
 

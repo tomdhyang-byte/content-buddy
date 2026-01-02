@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Button, IconButton } from '@/components/ui';
 
 interface EditModalProps {
@@ -23,6 +23,15 @@ export function EditModal({
     rows = 12,
 }: EditModalProps) {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    // Internal draft state - only synced to parent when user saves
+    const [draft, setDraft] = useState(value);
+
+    // Sync draft when modal opens or value changes from outside
+    useEffect(() => {
+        if (isOpen) {
+            setDraft(value);
+        }
+    }, [isOpen, value]);
 
     // Focus textarea when modal opens
     useEffect(() => {
@@ -46,6 +55,11 @@ export function EditModal({
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [isOpen, onClose]);
+
+    const handleSave = () => {
+        onChange(draft); // Only call onChange when user clicks "完成"
+        onClose();
+    };
 
     if (!isOpen) return null;
 
@@ -74,8 +88,8 @@ export function EditModal({
                 <div className="flex-1 p-6 overflow-hidden">
                     <textarea
                         ref={textareaRef}
-                        value={value}
-                        onChange={(e) => onChange(e.target.value)}
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value)}
                         placeholder={placeholder}
                         className="w-full h-full bg-white/5 border border-white/20 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none text-lg leading-relaxed"
                     />
@@ -86,7 +100,7 @@ export function EditModal({
                     <Button variant="ghost" onClick={onClose}>
                         取消
                     </Button>
-                    <Button variant="primary" onClick={onClose}>
+                    <Button variant="primary" onClick={handleSave}>
                         完成
                     </Button>
                 </div>
