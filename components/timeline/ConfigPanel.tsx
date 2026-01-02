@@ -226,13 +226,13 @@ export function ConfigPanel({
     const getStatusBadge = (status: GenerationStatus) => {
         switch (status) {
             case 'success':
-                return <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs rounded-full">✓</span>;
+                return <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-sm rounded-full">✓</span>;
             case 'loading':
-                return <span className="px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-xs rounded-full">...</span>;
+                return <span className="px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-sm rounded-full">...</span>;
             case 'error':
-                return <span className="px-2 py-0.5 bg-red-500/20 text-red-400 text-xs rounded-full">✗</span>;
+                return <span className="px-2 py-0.5 bg-red-500/20 text-red-400 text-sm rounded-full">✗</span>;
             default:
-                return <span className="px-2 py-0.5 bg-gray-500/20 text-gray-400 text-xs rounded-full">○</span>;
+                return <span className="px-2 py-0.5 bg-gray-500/20 text-gray-400 text-sm rounded-full">○</span>;
         }
     };
 
@@ -257,13 +257,12 @@ export function ConfigPanel({
                 <h3 className="text-base font-semibold text-white">段落 {segmentIndex + 1}</h3>
             </div>
 
-            {/* Script Text Preview (Larger) */}
-            <div className="px-4 py-3 border-b border-white/10 flex-shrink-0">
+            <div className="px-4 py-3 border-b border-white/10" style={{ flex: '0 0 60%', minHeight: 0 }}>
                 <div className="flex items-center justify-between mb-2">
-                    <label className="block text-xs font-medium text-gray-400">📝 文字內容</label>
+                    <label className="block text-sm font-medium text-gray-400">📝 文字內容</label>
                 </div>
                 <div
-                    className="bg-white/5 rounded-lg p-3 text-gray-300 text-sm leading-relaxed max-h-96 overflow-y-auto hover:bg-white/10 transition-colors cursor-pointer border border-transparent hover:border-white/10"
+                    className="bg-white/5 rounded-lg p-3 text-gray-300 text-base leading-relaxed h-[calc(100%-28px)] overflow-y-auto hover:bg-white/10 transition-colors cursor-pointer border border-transparent hover:border-white/10"
                     onClick={() => setIsTextModalOpen(true)}
                     title="點擊編輯文字"
                 >
@@ -271,12 +270,12 @@ export function ConfigPanel({
                 </div>
             </div>
 
-            {/* Config Area - 2 Columns */}
-            <div className="flex-1 flex min-h-0 overflow-hidden">
+            {/* Config Area - Fixed 40% height, 2 Columns */}
+            <div className="flex min-h-0 overflow-hidden" style={{ flex: '0 0 40%' }}>
                 {/* Left Column: Image Config (Compacted) */}
                 <div className="flex-1 flex flex-col p-4 border-r border-white/10 overflow-y-auto">
                     <div className="flex items-center justify-between mb-2">
-                        <label className="text-xs font-medium text-gray-400">🎨 Image</label>
+                        <label className="text-sm font-medium text-gray-400">🎨 Image</label>
                         {getStatusBadge(assets.promptStatus)}
                     </div>
 
@@ -284,7 +283,7 @@ export function ConfigPanel({
                         {/* Compact Prompt View */}
                         <div
                             onClick={() => setIsPromptModalOpen(true)}
-                            className="bg-white/5 rounded-lg px-3 py-2 text-xs text-gray-400 cursor-pointer hover:bg-white/10 transition-colors truncate border border-transparent hover:border-white/10"
+                            className="bg-white/5 rounded-lg px-3 py-2 text-sm text-gray-400 cursor-pointer hover:bg-white/10 transition-colors truncate border border-transparent hover:border-white/10"
                             title={editedPrompt}
                         >
                             {assets.promptStatus === 'loading' ? (
@@ -301,7 +300,7 @@ export function ConfigPanel({
                                 size="sm"
                                 onClick={onGeneratePrompt}
                                 disabled={assets.promptStatus === 'loading'}
-                                className="flex-1 text-xs"
+                                className="flex-1 text-sm"
                                 title="AI 自動生成 Prompt"
                             >
                                 {assets.promptStatus === 'loading' ? (
@@ -336,7 +335,7 @@ export function ConfigPanel({
                 <div className="flex-1 flex flex-col p-4 overflow-y-auto bg-black/10">
                     <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-2">
-                            <label className="text-xs font-medium text-gray-400">🔊 語音設定</label>
+                            <label className="text-sm font-medium text-gray-400">🔊 語音設定</label>
                             {getStatusBadge(assets.audioStatus)}
                         </div>
                         {/* New Popover for Settings & Regenerate */}
@@ -352,7 +351,7 @@ export function ConfigPanel({
 
                     {/* Dictionary Section (Prominent) */}
                     <div className="flex-1">
-                        <label className="block text-xs font-medium text-gray-400 mb-2">📖 發音字典（同步雲端）</label>
+                        <label className="block text-sm font-medium text-gray-400 mb-2">📖 發音字典（同步雲端）</label>
 
                         {/* Word Input */}
                         <div className="flex gap-1 mb-2">
@@ -361,7 +360,7 @@ export function ConfigPanel({
                                 placeholder="輸入字詞"
                                 value={globalDictWord}
                                 onChange={(e) => setGlobalDictWord(e.target.value)}
-                                className="flex-1 bg-white/5 border border-white/20 rounded px-2 py-1.5 text-white text-xs placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
+                                className="flex-1 bg-white/5 border border-white/20 rounded px-2 py-1.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
                             />
                             <Button
                                 size="sm"
