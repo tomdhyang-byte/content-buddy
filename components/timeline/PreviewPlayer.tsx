@@ -68,18 +68,40 @@ export function PreviewPlayer({
     // Derive current image
     const currentImage = currentSegment?.assets.imageUrl || null;
 
+    const lastAudioUrlRef = useRef<string | null>(null);
+
     // Handle segment change: Reset and load new audio
     useEffect(() => {
         if (!audioRef.current || !currentSegment?.assets.audioUrl) return;
 
-        // Only reset audio if segment actually changed
-        if (lastSegmentIndexRef.current !== currentSegmentIndex) {
+        const currentAudioUrl = currentSegment.assets.audioUrl;
+
+        // Only reset audio if segment actually changed OR audio URL changed (regeneration)
+        const hasSegmentChanged = lastSegmentIndexRef.current !== currentSegmentIndex;
+        const hasUrlChanged = lastAudioUrlRef.current !== currentAudioUrl;
+
+        if (hasSegmentChanged || hasUrlChanged) {
+            // Update refs
             lastSegmentIndexRef.current = currentSegmentIndex;
+            lastAudioUrlRef.current = currentAudioUrl;
 
             const audio = audioRef.current;
+
+            // If only URL changed (regeneration) and we are playing same segment, 
+            // we want to maintain playback state but load new source.
+            // If segment changed, we fundamentally switch.
+
+            const wasPlaying = !audio.paused;
+
             audio.pause();
-            audio.src = currentSegment.assets.audioUrl;
+            audio.src = currentAudioUrl;
             audio.currentTime = 0;
+
+            // Should we auto-play?
+            // 1. If isPlaying is true globally
+            // 2. BUT if this is a background update (not user seeking), interrupts might be jarring?
+            // User requested: "If I regenerate, auto-jump and play". That logic is handled in ReviewPage (handleGenerateAudio).
+            // Here we just ensure we respond to the prop change.
 
             if (isPlaying) {
                 audio.play().catch(console.error);
@@ -89,7 +111,7 @@ export function PreviewPlayer({
             audio.playbackRate = playbackRate;
 
             // Notify parent about segment change for UI sync
-            if (onSegmentChange && currentSegment) {
+            if (onSegmentChange && currentSegment && hasSegmentChanged) {
                 onSegmentChange(currentSegment.id);
             }
         }

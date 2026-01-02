@@ -141,6 +141,33 @@ export default function ReviewPage() {
             updateAssetStatus(segmentId, 'audioUrl', data.audioUrl);
             updateAssetStatus(segmentId, 'audioDuration', data.duration);
             updateAssetStatus(segmentId, 'audioStatus', 'success');
+
+            // Auto-jump logic: Calculate new start time for this segment
+            // We need to recalculate timeline based on updated assets to get the correct start time
+            // Since state updates are async, we can't rely on `timelineSegments` immediately here.
+            // However, we can approximate or use a fire-and-forget effect, OR manually calculate.
+
+            // Better approach: Calculate start time based on current state + this update
+            // We can read the *latest* segments from the ref if we had one, but effectively:
+            // The segment order doesn't change.
+            // We just need to sum durations of all previous segments.
+
+            // Note: `state` in closure might be stale if multiple updates happened, but usually okay for this action.
+            const segmentIndex = state.segments.findIndex(s => s.id === segmentId);
+            if (segmentIndex !== -1) {
+                let startTime = 0;
+                for (let i = 0; i < segmentIndex; i++) {
+                    const prevSegId = state.segments[i].id;
+                    const prevAssets = state.generatedAssets.get(prevSegId);
+                    // If playing previous segments, their duration is already known
+                    startTime += prevAssets?.audioDuration || 5; // Default 5s matches constant
+                }
+
+                // Jump to this start time!
+                setCurrentPlayTime(startTime);
+                // Auto-play to verify
+                setIsPlaying(true);
+            }
         } catch (error) {
             updateAssetStatus(segmentId, 'audioStatus', 'error');
             updateAssetStatus(segmentId, 'audioError', error instanceof Error ? error.message : 'Unknown error');
@@ -339,6 +366,18 @@ export default function ReviewPage() {
         }
     };
 
+    const handleSeek = (time: number) => {
+        setCurrentPlayTime(time);
+
+        // Optional: Update selected segment based on time
+        const segmentAtTime = timelineSegments.find(
+            seg => time >= seg.startTime && time < (seg.startTime + seg.duration)
+        );
+        if (segmentAtTime && segmentAtTime.id !== selectedSegmentId) {
+            setSelectedSegmentId(segmentAtTime.id);
+        }
+    };
+
     const handleNextStep = () => {
         setCurrentStep(4);
         router.push('/heygen');
@@ -445,6 +484,7 @@ export default function ReviewPage() {
                         onSelectSegment={handleSelectSegment}
                         isPlaying={isPlaying}
                         currentPlayTime={currentPlayTime}
+                        onSeek={handleSeek}
                     />
                 </div>
             </div>

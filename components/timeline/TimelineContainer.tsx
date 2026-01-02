@@ -48,6 +48,7 @@ interface TimelineContainerProps {
     onSelectSegment: (id: string) => void;
     isPlaying: boolean;
     currentPlayTime: number;
+    onSeek?: (time: number) => void;
 }
 
 export function TimelineContainer({
@@ -57,6 +58,7 @@ export function TimelineContainer({
     onSelectSegment,
     isPlaying,
     currentPlayTime,
+    onSeek,
 }: TimelineContainerProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const headerRef = useRef<HTMLDivElement>(null);
@@ -88,6 +90,34 @@ export function TimelineContainer({
         if (headerRef.current) {
             headerRef.current.scrollLeft = e.currentTarget.scrollLeft;
         }
+    };
+
+    // Handle timeline seeking (click on ruler)
+    const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (!headerRef.current || !onSeek) return;
+
+        const rect = headerRef.current.getBoundingClientRect();
+        const scrollLeft = headerRef.current.scrollLeft;
+        const relativeX = e.clientX - rect.left;
+
+        // Calculate time: (scroll offset + click position) / pixels per second
+        // Note: The time ruler starts at left padding (80px), so we need to account for that?
+        // Actually, looking at the rendering logic below:
+        // style={{ left: `${(i * 5 * LAYOUT_CONSTANTS.PIXELS_PER_SECOND) + 80}px` }}
+        // The render logic adds 80px offset for the labels, but wait...
+        // The ruler container `headerRef` corresponds to `containerRef`.
+        // The start of the timeline tracks seems to match the start of the scroll container.
+        // Let's check `div className="flex"` structure.
+        // There is a "Track Labels" column with width 20 (w-20 which is 80px).
+        // The `headerRef` is the right sibling `flex-1 overflow-hidden relative`.
+        // The `containerRef` is the bottom right sibling `flex-1 overflow-x-auto relative`.
+        // So `headerRef` starts at T=0 visually (after the 80px sidebar, which is OUTSIDE headerRef).
+        // Correct! The time 0 starts exactly at the left edge of headerRef (when scroll is 0).
+
+        const clickX = scrollLeft + relativeX;
+        const newTime = Math.max(0, Math.min(totalDuration, clickX / LAYOUT_CONSTANTS.PIXELS_PER_SECOND));
+
+        onSeek(newTime);
     };
 
     // Auto-scroll to follow playhead
@@ -142,15 +172,17 @@ export function TimelineContainer({
                 </div>
                 <div
                     ref={headerRef}
-                    className="flex-1 overflow-hidden relative"
+                    onClick={handleSeek}
+                    className="flex-1 overflow-hidden relative cursor-pointer hover:bg-white/5 transition-colors"
+                    title="點擊以跳轉時間"
                 >
                     {/* Time ruler placeholder */}
-                    <div className="h-8 bg-gray-800/30 flex items-center px-2 text-xs text-gray-500">
-                        {Array.from({ length: Math.ceil(totalDuration / 5) }).map((_, i) => (
+                    <div className="h-8 bg-gray-800/30 flex items-center px-2 text-xs text-gray-500 pointer-events-none">
+                        {Array.from({ length: Math.ceil(totalDuration / 5) + 1 }).map((_, i) => (
                             <span
                                 key={i}
-                                className="absolute"
-                                style={{ left: `${(i * 5 * LAYOUT_CONSTANTS.PIXELS_PER_SECOND) + 80}px` }}
+                                className="absolute border-l border-white/20 pl-1 h-3 flex items-center"
+                                style={{ left: `${(i * 5 * LAYOUT_CONSTANTS.PIXELS_PER_SECOND)}px` }}
                             >
                                 {i * 5}s
                             </span>
