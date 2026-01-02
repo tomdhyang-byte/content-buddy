@@ -11,11 +11,10 @@ ContentBuddy 是一個 AI 驅動的文字轉影片自動化工具，專為內容
 *   **AI 繪圖 (AI Visuals):** 整合 Google Gemini，自動生成 16:9 高品質圖片。內建 Prompt 優化器，支援多種視覺風格。
 *   **AI 語音 (AI Voiceover):** 整合 Minimax TTS，生成自然流暢的語音旁白。支援語速與情緒調整。
 *   **時間軸編輯器 (Timeline Editor):** 全新 Quadrant 佈局：
-    *   **預覽播放器 (Preview Player):** 支援即點即播、無縫連續預覽。
+    *   **預覽播放器 (Preview Player):** 支援即點即播、串流預覽播放（邊生成邊觀看）。
     *   **配置面板 (Config Panel):** 整合式 Prompt 編輯與素材生成控制，即時同步播放進度。
     *   **多軌時間軸:** 視覺化管理圖片、文字與語音軌道，支援「智慧自動捲動」與「單點選取模式」。
-    *   **極速批次生成 (Parallel Batch Generation):** 支援全並發生成 (Promise.all)，大幅縮短長腳本的等待時間。
-    *   **多軌時間軸:** 視覺化管理圖片、文字與語音軌道。
+    *   **分批生成 (Chunked Batch Generation):** 每次處理 3 個段落，降低 API 壓力並支援生成中預覽。
 *   **安全架構:** 全面採用 Zod 驗證與 Base64 數據流，無伺服器狀態依賴，支援 Serverless 部署。
 
 ## 🛠️ 技術棧

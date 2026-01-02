@@ -47,7 +47,7 @@ ContentBuddy/
 ### 2. 編輯器元件 (The Editor)
 編輯器 (`app/review/`) 是由這裡的三大金剛組成的 (`components/timeline/`)：
 
-*   **`PreviewPlayer.tsx` (預覽播放器)**: 左上角的螢幕。負責把圖片和聲音串起來播給你看。它是個「乖寶寶」元件，完全聽命於時間軸指令，同時會主動通知 (Callbacks) 時間軸進度。
+*   **`PreviewPlayer.tsx` (預覽播放器)**: 左上角的螢幕。負責把圖片和聲音串起來播給你看。**最近新增：** 串流預覽播放（邊生成邊觀看，自動等待/續播下一段）。
 *   **`ConfigPanel.tsx` (設定面板)**: 右上角的控制台。想重畫圖片、重錄聲音、改 Prompt，都在這裡操作。**最近新增：** 支援即時跟隨播放進度 (Sync with Playback)。
 *   **`TimelineContainer.tsx` (時間軸)**: 下方的軌道區。展示每一段的文字、圖片狀態和波形。**最近新增：** 智慧自動捲動 (Smart Autoscroll) 與同步 Header。
 
