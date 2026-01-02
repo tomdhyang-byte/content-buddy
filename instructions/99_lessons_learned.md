@@ -80,6 +80,61 @@ flushSync(() => {
 
 ---
 
+### 2026-01-02: flushSync + requestAnimationFrame 競態條件導致播放器跳回上一段
+
+**情境**：
+- 區塊一、區塊二都已生成完成
+- 播放區塊一，結束後應該自動播放區塊二
+- 實際上：會短暫跳到區塊二，然後馬上跳回區塊一（起始位置），播放停止
+
+**根因**：
+- `PreviewPlayer` 使用 `requestAnimationFrame` (rAF) 配合 `flushSync` 來即時更新播放時間
+- 當 `flushSync` 執行時，React 同步觸發重新渲染，導致 `useEffect` 的清理函數 (cleanup) 被執行
+- 清理函數雖然呼叫了 `cancelAnimationFrame`，但此時**程式控制權還在舊的 rAF callback 裡面**
+- `flushSync` 返回後，舊的 callback 繼續執行剩餘的程式碼，這一行：
+  ```tsx
+  animationFrameRef.current = requestAnimationFrame(updateTime);
+  ```
+- 這會用**舊的閉包變數**（Segment 0 的 `segmentStartTime`）預約一個新的 rAF
+- 新 rAF 執行時，計算出 `globalTime = 0 + 0 = 0`，把播放時間設回開頭
+
+**解決方案**：
+```tsx
+useEffect(() => {
+    let isCancelled = false;
+
+    const updateTime = () => {
+        if (isCancelled) return; // 防止幽靈幀 (Ghost Frame)
+
+        // ... time calculation ...
+        flushSync(() => {
+            onTimeUpdate(globalTime);
+        });
+
+        if (!isCancelled) { // 再次檢查，確保 flushSync 觸發 cleanup 後不再預約
+            animationFrameRef.current = requestAnimationFrame(updateTime);
+        }
+    };
+
+    animationFrameRef.current = requestAnimationFrame(updateTime);
+
+    return () => {
+        isCancelled = true;
+        cancelAnimationFrame(animationFrameRef.current);
+    };
+}, [/* deps */]);
+```
+
+**教訓**：
+1. **flushSync 會同步觸發 React 生命週期**：在 rAF callback 裡使用 flushSync，cleanup 會在 flushSync 內部執行，而非 callback 結束後
+2. **cancelAnimationFrame 只能取消「尚未執行」的幀**：如果當前幀已經在執行，取消是無效的
+3. **isCancelled 旗標模式**：任何可能在異步環境下被 cleanup 中斷的邏輯，都應該用旗標來防止後續動作
+
+**相關檔案**：
+- `components/timeline/PreviewPlayer.tsx`
+
+---
+
 ## 🟡 一般教訓
 
 ### Minimax TTS
