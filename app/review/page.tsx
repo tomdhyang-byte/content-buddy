@@ -255,8 +255,8 @@ export default function ReviewPage() {
             return chunks;
         };
 
-        // Process segments in batches of 5 for better UX and rate limit handling
-        const BATCH_SIZE = 5;
+        // Process segments in batches of 3 for better UX and rate limit handling
+        const BATCH_SIZE = 3;
         const chunks = chunkArray(state.segments, BATCH_SIZE);
 
         for (const chunk of chunks) {

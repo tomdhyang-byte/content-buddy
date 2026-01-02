@@ -145,14 +145,28 @@ export function PreviewPlayer({
         };
     }, [isPlaying, segmentStartTime, onTimeUpdate]);
 
-    // Handle audio end - notify parent to advance
+    const [waitingForNextSegment, setWaitingForNextSegment] = React.useState(false);
+
+    // Derived: Current segment is ready if assets exist
+    const currentReady = currentSegment?.assets.imageStatus === 'success' && currentSegment?.assets.audioStatus === 'success';
+
+    // Handle audio end - notify parent to advance or wait
     const handleAudioEnd = useCallback(() => {
         if (currentSegmentIndex < segments.length - 1) {
-            // Calculate next segment start time
-            const nextStartTime = segments
-                .slice(0, currentSegmentIndex + 1)
-                .reduce((sum, seg) => sum + seg.duration, 0);
-            onTimeUpdate(nextStartTime);
+            const nextSegment = segments[currentSegmentIndex + 1];
+            const nextReady = nextSegment.assets.imageStatus === 'success' && nextSegment.assets.audioStatus === 'success';
+
+            if (nextReady) {
+                // Next segment is ready, advance immediately
+                const nextStartTime = segments
+                    .slice(0, currentSegmentIndex + 1)
+                    .reduce((sum, seg) => sum + seg.duration, 0);
+                onTimeUpdate(nextStartTime);
+            } else {
+                // Next segment not ready, enter wait state
+                setWaitingForNextSegment(true);
+                onPlayStateChange(false);
+            }
         } else {
             // All segments finished
             onPlayStateChange(false);
@@ -160,6 +174,27 @@ export function PreviewPlayer({
             onTimeUpdate(0);
         }
     }, [currentSegmentIndex, segments, onTimeUpdate, onPlayStateChange, onPlayComplete]);
+
+    // Effect: Watch for next segment becoming ready while waiting
+    useEffect(() => {
+        if (!waitingForNextSegment) return;
+
+        const nextSegment = segments[currentSegmentIndex + 1];
+        if (!nextSegment) return;
+
+        const nextReady = nextSegment.assets.imageStatus === 'success' && nextSegment.assets.audioStatus === 'success';
+
+        if (nextReady) {
+            // Next segment is now ready! Resume playback.
+            setWaitingForNextSegment(false);
+            const nextStartTime = segments
+                .slice(0, currentSegmentIndex + 1)
+                .reduce((sum, seg) => sum + seg.duration, 0);
+            onTimeUpdate(nextStartTime);
+            onPlayStateChange(true);
+        }
+    }, [waitingForNextSegment, segments, currentSegmentIndex, onTimeUpdate, onPlayStateChange]);
+
 
     // Attach audio end listener
     useEffect(() => {
@@ -173,7 +208,8 @@ export function PreviewPlayer({
     }, [handleAudioEnd]);
 
     const handlePlayPause = () => {
-        if (!allReady) return;
+        // Can play if current segment is ready (don't need allReady anymore)
+        if (!currentReady) return;
         onPlayStateChange(!isPlaying);
     };
 
@@ -187,12 +223,22 @@ export function PreviewPlayer({
                     <img
                         src={currentImage}
                         alt="Preview"
-                        className="max-w-full max-h-full object-contain"
+                        className={`max-w-full max-h-full object-contain ${waitingForNextSegment ? 'opacity-50' : ''}`}
                     />
                 ) : (
                     <div className="text-gray-500 text-center p-4">
                         <div className="text-4xl mb-2">🎬</div>
                         <p>生成素材後可預覽 {completedCount} / {segments.length}</p>
+                    </div>
+                )}
+
+                {/* Waiting State Overlay */}
+                {waitingForNextSegment && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center z-20">
+                        <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+                        <p className="text-white font-medium bg-black/60 px-4 py-2 rounded-full backdrop-blur-sm">
+                            等待下一段生成...
+                        </p>
                     </div>
                 )}
 
@@ -208,7 +254,7 @@ export function PreviewPlayer({
             <div className="p-4 flex-shrink-0 flex items-center justify-center gap-4 bg-gray-900/30 backdrop-blur-sm border-t border-white/5">
                 <div className="w-10 h-10" />
 
-                {allReady ? (
+                {(currentReady || isPlaying || waitingForNextSegment) ? (
                     <IconButton
                         icon={
                             isPlaying ? (
@@ -223,7 +269,7 @@ export function PreviewPlayer({
                         }
                         onClick={handlePlayPause}
                         variant="primary"
-                        className="w-14 h-14 rounded-full group"
+                        className={`w-14 h-14 rounded-full group ${!currentReady ? 'opacity-50 cursor-not-allowed' : ''}`}
                         title={isPlaying ? '暫停' : '播放'}
                     />
                 ) : (
