@@ -92,16 +92,43 @@ export function TimelineContainer({
         }
     };
 
-    // Handle timeline seeking (click on ruler)
-    const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
-        if (!headerRef.current || !onSeek) return;
 
-        const rect = headerRef.current.getBoundingClientRect();
-        const scrollLeft = headerRef.current.scrollLeft;
-        const relativeX = e.clientX - rect.left;
 
-        const clickX = scrollLeft + relativeX;
-        const newTime = Math.max(0, Math.min(totalDuration, clickX / LAYOUT_CONSTANTS.PIXELS_PER_SECOND));
+    // Handle seek logic (common for header and tracks)
+    const handleSeek = (timeOrEvent: React.MouseEvent<HTMLDivElement> | number) => {
+        if (!onSeek) return;
+
+        let newTime: number;
+
+        if (typeof timeOrEvent === 'number') {
+            newTime = timeOrEvent;
+        } else {
+            // Mouse Event
+            const e = timeOrEvent;
+            // Find the scrolling container to calculate relative X
+            if (!containerRef.current) return;
+
+            const rect = containerRef.current.getBoundingClientRect();
+            const scrollLeft = containerRef.current.scrollLeft;
+
+            // Calculate relative X within the scrolling content
+            // e.clientX is viewport x
+            // rect.left is container viewport x
+            const relativeX = e.clientX - rect.left;
+
+            // Absolute X in the timeline = scrollLeft + relativeX
+            const clickX = scrollLeft + relativeX;
+
+            newTime = Math.max(0, Math.min(totalDuration, clickX / LAYOUT_CONSTANTS.PIXELS_PER_SECOND));
+
+            // Also update selection based on this time
+            const segment = timelineSegments.find(
+                seg => newTime >= seg.startTime && newTime < (seg.startTime + seg.duration)
+            );
+            if (segment) {
+                onSelectSegment(segment.id);
+            }
+        }
 
         onSeek(newTime);
     };
@@ -130,7 +157,7 @@ export function TimelineContainer({
     }, [currentPlayTime, isPlaying, autoScrollEnabled]);
 
     return (
-        <div className="bg-gray-900/50 rounded-xl border border-white/10 overflow-hidden h-full flex flex-col relative group">
+        <div className="bg-gray-900/50 rounded-xl border border-white/10 h-full flex flex-col relative group">
             {/* Resume Auto-Scroll Button (Floating) */}
             {!autoScrollEnabled && isPlaying && (
                 <button
@@ -153,7 +180,7 @@ export function TimelineContainer({
 
             {/* Track Labels */}
             <div className="flex border-b border-white/10">
-                <div className="w-20 flex-shrink-0 bg-gray-800/50 p-2 text-xs text-gray-400 font-medium">
+                <div className="w-20 flex-shrink-0 bg-gray-800/50 p-2 text-xs text-gray-400 font-medium z-20 relative">
                     軌道
                 </div>
                 <div
@@ -181,9 +208,9 @@ export function TimelineContainer({
             </div>
 
             {/* Tracks Container */}
-            <div className="flex">
+            <div className="flex relative flex-1 min-h-0">
                 {/* Track Labels Column */}
-                <div className="w-20 flex-shrink-0 bg-gray-800/50">
+                <div className="w-20 flex-shrink-0 bg-gray-800/50 z-20 relative h-full">
                     <div className="h-16 flex items-center justify-center text-xs text-gray-400 border-b border-white/5">
                         🖼️ 圖片
                     </div>
@@ -198,7 +225,7 @@ export function TimelineContainer({
                 {/* Scrollable Timeline */}
                 <div
                     ref={containerRef}
-                    className="flex-1 overflow-x-auto relative"
+                    className="flex-1 overflow-x-auto relative h-full"
                     style={{ minWidth: 0 }}
                     onScroll={handleScroll}
                     onWheel={() => {
@@ -207,18 +234,43 @@ export function TimelineContainer({
                     onTouchMove={() => {
                         if (isPlaying) setAutoScrollEnabled(false);
                     }}
-                    onMouseDown={() => {
+                    onMouseDown={(e) => {
                         if (isPlaying) setAutoScrollEnabled(false);
+                        // Only handle clicks directly on the container background or gaps
+                        // The track items will stopPropagation if needed, OR we just let it all bubble
+                        // Actually, we want clicking segments to ALSO seek.
+                        handleSeek(e);
                     }}
                 >
-                    <div style={{ width: `${totalWidth}px`, minWidth: '100%' }}>
+                    <div style={{ width: `${totalWidth}px`, minWidth: '100%' }} className="cursor-pointer relative min-h-full">
+                        {/* Playhead with Handle - MOVED to top level of tracks container to overlay everything */}
+                        <div
+                            className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-50 pointer-events-none"
+                            style={{
+                                left: `${currentPlayTime * LAYOUT_CONSTANTS.PIXELS_PER_SECOND}px`,
+                                transition: 'left 0.1s linear',
+                                height: '100%'
+                            }}
+                        >
+                            {/* Handle (Circle) - Visual Indicator Only */}
+                            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-4 h-4 flex items-center justify-center pointer-events-none">
+                                <div className="w-4 h-4 bg-red-500 rounded-full shadow-md border-2 border-white ring-1 ring-black/20" />
+                            </div>
+
+                            {/* Line Body DOT */}
+                            <div className="w-2.5 h-2.5 bg-red-500 rounded-full -ml-[4px] mt-0 hidden" />
+                        </div>
+
                         {/* Image Track */}
-                        <div className="h-16 flex border-b border-white/5 relative">
+                        <div className="h-16 flex border-b border-white/5 relative z-10">
                             {timelineSegments.map((seg) => (
                                 <div
                                     key={`img-${seg.id}`}
-                                    onClick={() => onSelectSegment(seg.id)}
-                                    className={`h-full flex items-center justify-center cursor-pointer transition-all border-r border-white/10 ${selectedSegmentId === seg.id
+                                    onClick={(e) => {
+                                        // e.stopPropagation(); // We want to allow seek!
+                                        // onSelectSegment(seg.id); // handleSeek will handle selection too!
+                                    }}
+                                    className={`h-full flex items-center justify-center transition-all border-r border-white/10 pointer-events-none ${selectedSegmentId === seg.id
                                         ? 'ring-2 ring-indigo-500 ring-inset'
                                         : 'hover:bg-white/5'
                                         } ${seg.assets.imageStatus === 'success'
@@ -245,15 +297,6 @@ export function TimelineContainer({
                                 </div>
                             ))}
 
-                            {/* Playhead */}
-                            {isPlaying && (
-                                <div
-                                    className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10 pointer-events-none"
-                                    style={{ left: `${currentPlayTime * LAYOUT_CONSTANTS.PIXELS_PER_SECOND}px` }}
-                                >
-                                    <div className="w-3 h-3 bg-red-500 rounded-full -ml-[5px] -mt-1" />
-                                </div>
-                            )}
                         </div>
 
                         {/* Text Track */}

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useRef, useEffect, useMemo, useCallback } from 'react';
+import { flushSync } from 'react-dom';
 import { TimelineSegment } from './TimelineContainer';
 import { IconButton, Button } from '@/components/ui';
 
@@ -184,7 +185,10 @@ export function PreviewPlayer({
             }
 
             const globalTime = segmentStartTime + audioRef.current.currentTime;
-            onTimeUpdate(globalTime);
+            // Use flushSync to force React to render synchronously
+            flushSync(() => {
+                onTimeUpdate(globalTime);
+            });
             animationFrameRef.current = requestAnimationFrame(updateTime);
         };
 

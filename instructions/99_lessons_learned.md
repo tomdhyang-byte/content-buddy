@@ -48,6 +48,38 @@
 
 ---
 
+### 2026-01-02: React 18 Automatic Batching 導致高頻率狀態更新不渲染
+
+**情境**：
+- 播放音訊時，紅色播放頭（進度條）完全不動
+- 但按暫停後，播放頭會「跳」到正確的播放位置
+- Console 沒有錯誤，debug log 顯示 `onTimeUpdate` 確實有被呼叫且數值正確
+
+**根因**：
+- `PreviewPlayer` 使用 `requestAnimationFrame` 每秒約 60 次呼叫 `onTimeUpdate(time)`
+- React 18 的「Automatic Batching」會自動合併這些高頻率的狀態更新
+- 結果是狀態有更新，但 React 只在某些「閒置時機」（如暫停）才真正觸發重繪
+
+**解決方案**：
+```tsx
+import { flushSync } from 'react-dom';
+
+// 在高頻率更新處使用 flushSync 強制同步渲染
+flushSync(() => {
+    onTimeUpdate(globalTime);
+});
+```
+
+**教訓**：
+1. **React 18 Batching**：所有非同步上下文（setTimeout, Promise, requestAnimationFrame）的狀態更新都會被自動批次合併
+2. **高頻率動畫**：如果需要即時視覺回饋（如播放頭、進度條），必須使用 `flushSync` 強制同步渲染
+3. **症狀辨識**：「暫停後才更新」是 Batching 問題的典型症狀
+
+**相關檔案**：
+- `components/timeline/PreviewPlayer.tsx`
+
+---
+
 ## 🟡 一般教訓
 
 ### Minimax TTS
