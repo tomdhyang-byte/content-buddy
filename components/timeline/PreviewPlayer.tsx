@@ -190,6 +190,8 @@ export function PreviewPlayer({
 
     // Time tracking loop (only while playing)
     useEffect(() => {
+        let isCancelled = false;
+
         if (!isPlaying) {
             if (animationFrameRef.current) {
                 cancelAnimationFrame(animationFrameRef.current);
@@ -199,6 +201,8 @@ export function PreviewPlayer({
         }
 
         const updateTime = () => {
+            if (isCancelled) return;
+
             if (!audioRef.current || audioRef.current.ended || audioRef.current.paused) {
                 animationFrameRef.current = requestAnimationFrame(updateTime);
                 return;
@@ -206,15 +210,21 @@ export function PreviewPlayer({
 
             const globalTime = segmentStartTime + audioRef.current.currentTime;
             // Use flushSync to force React to render synchronously
+            // Note: flushSync triggers re-render/cleanup synchronously if parent state updates.
+            // We must ensure we don't schedule a new rAF if this effect is cleaned up during flushSync.
             flushSync(() => {
                 onTimeUpdate(globalTime);
             });
-            animationFrameRef.current = requestAnimationFrame(updateTime);
+
+            if (!isCancelled) {
+                animationFrameRef.current = requestAnimationFrame(updateTime);
+            }
         };
 
         animationFrameRef.current = requestAnimationFrame(updateTime);
 
         return () => {
+            isCancelled = true;
             if (animationFrameRef.current) {
                 cancelAnimationFrame(animationFrameRef.current);
             }
@@ -269,6 +279,13 @@ export function PreviewPlayer({
             const nextSegment = segments[nextSegmentIndex];
             // Relaxed check: Only need Audio to advance
             const nextReady = nextSegment.assets.audioStatus === 'success';
+
+            console.log('[PreviewPlayer] Checking next segment readiness:', {
+                nextSegmentIndex,
+                nextSegmentId: nextSegment.id,
+                audioStatus: nextSegment.assets.audioStatus,
+                isReady: nextReady
+            });
 
             if (nextReady) {
                 // Next segment is ready, advance immediately
