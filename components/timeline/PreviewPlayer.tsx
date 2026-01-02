@@ -117,6 +117,36 @@ export function PreviewPlayer({
         }
     }, [currentSegmentIndex, currentSegment, isPlaying, onSegmentChange, playbackRate]);
 
+    // Sync audio time with global time (handle seeking)
+    useEffect(() => {
+        const audio = audioRef.current;
+        if (!audio || !currentSegment?.assets.audioUrl) return;
+
+        // Calculate local time for this segment
+        // If currentTime < segmentStartTime (shouldn't happen with correct index), clamp to 0
+        const localTime = Math.max(0, currentTime - segmentStartTime);
+
+        // Check if we need to seek (diff > 0.5s)
+        if (Math.abs(audio.currentTime - localTime) > 0.5) {
+            audio.currentTime = localTime;
+        }
+    }, [currentTime, segmentStartTime, currentSegment]);
+
+    // Sync audio time with global time (handle seeking)
+    useEffect(() => {
+        const audio = audioRef.current;
+        if (!audio || !currentSegment?.assets.audioUrl) return;
+
+        // Calculate local time for this segment
+        // If currentTime < segmentStartTime (shouldn't happen with correct index), clamp to 0
+        const localTime = Math.max(0, currentTime - segmentStartTime);
+
+        // Check if we need to seek (diff > 0.5s)
+        if (Math.abs(audio.currentTime - localTime) > 0.5) {
+            audio.currentTime = localTime;
+        }
+    }, [currentTime, segmentStartTime, currentSegment]);
+
     // Handle playback rate changes
     useEffect(() => {
         if (audioRef.current) {
