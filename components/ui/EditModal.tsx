@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import { Button } from '@/components/ui';
+import { Button, IconButton } from '@/components/ui';
 
 interface EditModalProps {
     isOpen: boolean;
@@ -28,9 +28,13 @@ export function EditModal({
     useEffect(() => {
         if (isOpen && textareaRef.current) {
             textareaRef.current.focus();
-            textareaRef.current.setSelectionRange(value.length, value.length);
+            // Move cursor to end only on initial open
+            textareaRef.current.setSelectionRange(
+                textareaRef.current.value.length,
+                textareaRef.current.value.length
+            );
         }
-    }, [isOpen, value.length]);
+    }, [isOpen]); // Only trigger on modal open, not on value change
 
     // Close on Escape key
     useEffect(() => {
@@ -54,27 +58,26 @@ export function EditModal({
             />
 
             {/* Modal Content */}
-            <div className="relative w-full max-w-3xl mx-4 bg-gray-900 rounded-2xl border border-white/10 shadow-2xl overflow-hidden">
+            <div className="relative w-[90vw] max-w-6xl h-[80vh] mx-4 bg-gray-900 rounded-2xl border border-white/10 shadow-2xl overflow-hidden flex flex-col">
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
                     <h2 className="text-lg font-semibold text-white">{title}</h2>
-                    <button
+                    <IconButton
+                        icon="✕"
                         onClick={onClose}
-                        className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
-                    >
-                        ✕
-                    </button>
+                        className="rounded-full"
+                        size="sm"
+                    />
                 </div>
 
                 {/* Body */}
-                <div className="p-6">
+                <div className="flex-1 p-6 overflow-hidden">
                     <textarea
                         ref={textareaRef}
                         value={value}
                         onChange={(e) => onChange(e.target.value)}
                         placeholder={placeholder}
-                        rows={rows}
-                        className="w-full bg-white/5 border border-white/20 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none text-sm leading-relaxed"
+                        className="w-full h-full bg-white/5 border border-white/20 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none text-lg leading-relaxed"
                     />
                 </div>
 

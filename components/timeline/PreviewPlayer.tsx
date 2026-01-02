@@ -2,6 +2,7 @@
 
 import React, { useRef, useEffect, useMemo, useCallback } from 'react';
 import { TimelineSegment } from './TimelineContainer';
+import { IconButton, Button } from '@/components/ui';
 
 interface PreviewPlayerProps {
     segments: TimelineSegment[];
@@ -208,30 +209,30 @@ export function PreviewPlayer({
                 <div className="w-10 h-10" />
 
                 {allReady ? (
-                    <button
+                    <IconButton
+                        icon={
+                            isPlaying ? (
+                                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+                                </svg>
+                            ) : (
+                                <svg className="w-6 h-6 ml-1 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M8 5v14l11-7z" />
+                                </svg>
+                            )
+                        }
                         onClick={handlePlayPause}
-                        className="w-14 h-14 rounded-full flex items-center justify-center text-white transition-all bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-lg group"
+                        variant="primary"
+                        className="w-14 h-14 rounded-full group"
                         title={isPlaying ? '暫停' : '播放'}
-                    >
-                        {isPlaying ? (
-                            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
-                            </svg>
-                        ) : (
-                            <svg className="w-6 h-6 ml-1 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M8 5v14l11-7z" />
-                            </svg>
-                        )}
-                    </button>
+                    />
                 ) : (
-                    <button
+                    <Button
                         onClick={onBatchGenerate}
                         disabled={isBatchGenerating}
-                        className={`h-14 px-6 rounded-full border flex items-center justify-center gap-2 min-w-[200px] transition-all
-                            ${isBatchGenerating
-                                ? 'bg-gray-800 border-white/10 text-gray-400 cursor-not-allowed'
-                                : 'bg-indigo-600/20 border-indigo-500/50 text-indigo-300 hover:bg-indigo-600/30 hover:border-indigo-500 hover:text-white hover:shadow-lg hover:shadow-indigo-500/20'
-                            }`}
+                        variant={isBatchGenerating ? 'secondary' : 'primary'}
+                        size="lg"
+                        className={`h-14 rounded-full min-w-[200px] shadow-lg ${isBatchGenerating ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105 transition-transform'}`}
                     >
                         {isBatchGenerating ? (
                             <>
@@ -244,7 +245,7 @@ export function PreviewPlayer({
                                 <span className="text-sm font-medium">一鍵生成全部素材 ({completedCount}/{segments.length})</span>
                             </>
                         )}
-                    </button>
+                    </Button>
                 )}
 
                 <div className="w-10 h-10" />

@@ -231,6 +231,11 @@ export default function ReviewPage() {
         if (isBatchGenerating) return;
         setIsBatchGenerating(true);
 
+        // Auto-select first segment so user can start reviewing immediately
+        if (state.segments.length > 0) {
+            setSelectedSegmentId(state.segments[0].id);
+        }
+
         // Fetch global dictionary once before processing all segments
         let globalDict: PronunciationDictItem[] = [];
         try {
@@ -241,8 +246,22 @@ export default function ReviewPage() {
             console.error('Failed to fetch global dictionary:', error);
         }
 
-        // Process ALL segments concurrently for maximum speed
-        await Promise.all(state.segments.map(segment => processSegment(segment, globalDict)));
+        // Helper function to chunk array
+        const chunkArray = <T,>(array: T[], size: number): T[][] => {
+            const chunks: T[][] = [];
+            for (let i = 0; i < array.length; i += size) {
+                chunks.push(array.slice(i, i + size));
+            }
+            return chunks;
+        };
+
+        // Process segments in batches of 5 for better UX and rate limit handling
+        const BATCH_SIZE = 5;
+        const chunks = chunkArray(state.segments, BATCH_SIZE);
+
+        for (const chunk of chunks) {
+            await Promise.all(chunk.map(segment => processSegment(segment, globalDict)));
+        }
 
         setIsBatchGenerating(false);
     };
@@ -307,13 +326,14 @@ export default function ReviewPage() {
     const handleSelectSegment = (id: string) => {
         setSelectedSegmentId(id);
 
-        // Context-Aware Logic:
-        // 1. If all assets are ready (Preview Mode) -> Click seeks to that segment and plays
-        // 2. If assets incomplete (Editing Mode) -> Click only selects (no sound)
-        if (allComplete) {
-            const segment = timelineSegments.find(s => s.id === id);
-            if (segment && segment.startTime !== undefined) {
-                setCurrentPlayTime(segment.startTime);
+        // ALWAYS update preview position when clicking a segment
+        const segment = timelineSegments.find(s => s.id === id);
+        if (segment && segment.startTime !== undefined) {
+            setCurrentPlayTime(segment.startTime);
+
+            // Context-Aware Logic:
+            // Only auto-play if all assets are ready (Preview Mode)
+            if (allComplete) {
                 setIsPlaying(true);
             }
         }

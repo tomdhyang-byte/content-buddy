@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SegmentAssets, GenerationStatus, PronunciationDictItem } from '@/types';
-import { Button, Spinner, EditModal, ConfirmModal } from '@/components/ui';
+import { Button, Spinner, EditModal, ConfirmModal, VoiceSettingsPopover, IconButton } from '@/components/ui';
 
 interface ConfigPanelProps {
     segmentId: string | null;
@@ -37,10 +37,6 @@ export function ConfigPanel({
     const [isTextModalOpen, setIsTextModalOpen] = useState(false);
     const [editedText, setEditedText] = useState('');
 
-    // Audio player state
-    const audioInstanceRef = useRef<HTMLAudioElement | null>(null);
-    const [isAudioPlaying, setIsAudioPlaying] = useState(false);
-
     // Global Dictionary Sync states
     const [globalDictWord, setGlobalDictWord] = useState('');
     const [globalDictPinyin, setGlobalDictPinyin] = useState('');
@@ -74,42 +70,6 @@ export function ConfigPanel({
         setEditedText(segmentText);
     }, [segmentText]);
 
-    // Handle audio lifecycle
-    useEffect(() => {
-        if (!audioInstanceRef.current) {
-            audioInstanceRef.current = new Audio();
-        }
-        const audio = audioInstanceRef.current;
-
-        const handleEnded = () => setIsAudioPlaying(false);
-        const handlePause = () => setIsAudioPlaying(false);
-        const handlePlay = () => setIsAudioPlaying(true);
-
-        audio.addEventListener('ended', handleEnded);
-        audio.addEventListener('pause', handlePause);
-        audio.addEventListener('play', handlePlay);
-
-        return () => {
-            audio.removeEventListener('ended', handleEnded);
-            audio.removeEventListener('pause', handlePause);
-            audio.removeEventListener('play', handlePlay);
-            audio.pause();
-            audio.src = '';
-        };
-    }, []);
-
-    // Update audio source when asset changes
-    useEffect(() => {
-        if (!audioInstanceRef.current) return;
-        const audio = audioInstanceRef.current;
-        if (assets?.audioUrl && audio.src !== assets.audioUrl) {
-            audio.src = assets.audioUrl;
-            // Don't auto-play, just load. Only auto-play if it was playing the *same* track logic? 
-            // Better behavior: Reset state on track change
-            setIsAudioPlaying(false);
-        }
-    }, [assets?.audioUrl]);
-
     const handlePromptSave = (newPrompt: string) => {
         setEditedPrompt(newPrompt);
         onPromptChange(newPrompt);
@@ -118,26 +78,6 @@ export function ConfigPanel({
     const handleTextSave = (newText: string) => {
         setEditedText(newText);
         onTextChange(newText);
-    };
-
-    const handlePlayAudio = () => {
-        if (!assets?.audioUrl) return;
-
-        if (!audioInstanceRef.current) {
-            audioInstanceRef.current = new Audio();
-        }
-        const audio = audioInstanceRef.current;
-
-        // Ensure source is set (in case it wasn't caught by effect for some reason, though effect should handle it)
-        if (audio.src !== assets.audioUrl) {
-            audio.src = assets.audioUrl;
-        }
-
-        if (isAudioPlaying) {
-            audio.pause();
-        } else {
-            audio.play().catch(console.error);
-        }
     };
 
     // Global Dictionary Sync handlers
@@ -317,19 +257,13 @@ export function ConfigPanel({
                 <h3 className="text-base font-semibold text-white">段落 {segmentIndex + 1}</h3>
             </div>
 
-            {/* Script Text Preview (Fixed Height) */}
+            {/* Script Text Preview (Larger) */}
             <div className="px-4 py-3 border-b border-white/10 flex-shrink-0">
-                <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center justify-between mb-2">
                     <label className="block text-xs font-medium text-gray-400">📝 文字內容</label>
-                    <button
-                        className="text-[10px] text-gray-500 hover:text-indigo-400 transition-colors"
-                        onClick={() => setIsTextModalOpen(true)}
-                    >
-                        編輯文字
-                    </button>
                 </div>
                 <div
-                    className="bg-white/5 rounded-lg p-2.5 text-gray-300 text-sm leading-relaxed h-16 overflow-hidden line-clamp-3 hover:bg-white/10 transition-colors cursor-pointer"
+                    className="bg-white/5 rounded-lg p-3 text-gray-300 text-sm leading-relaxed max-h-96 overflow-y-auto hover:bg-white/10 transition-colors cursor-pointer border border-transparent hover:border-white/10"
                     onClick={() => setIsTextModalOpen(true)}
                     title="點擊編輯文字"
                 >
@@ -337,242 +271,192 @@ export function ConfigPanel({
                 </div>
             </div>
 
-            {/* Image & Audio Config (Side by Side) */}
+            {/* Config Area - 2 Columns */}
             <div className="flex-1 flex min-h-0 overflow-hidden">
-                {/* Left Column: Image Config */}
+                {/* Left Column: Image Config (Compacted) */}
                 <div className="flex-1 flex flex-col p-4 border-r border-white/10 overflow-y-auto">
                     <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                            <label className="text-xs font-medium text-gray-400">🎨 Image Prompt</label>
-                            {getStatusBadge(assets.promptStatus)}
-                        </div>
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onGeneratePrompt();
-                            }}
-                            disabled={assets.promptStatus === 'loading'}
-                            className="text-[10px] px-2 py-1 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 rounded border border-indigo-500/30 transition-all flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="AI 自動優化 Prompt"
-                        >
-                            {assets.promptStatus === 'loading' ? (
-                                <><Spinner size="sm" /> 生成中...</>
-                            ) : (
-                                assets.imagePrompt ? (
-                                    <>🔄 重新生成</>
-                                ) : (
-                                    <>✨ AI 生成</>
-                                )
-                            )}
-                        </button>
+                        <label className="text-xs font-medium text-gray-400">🎨 Image</label>
+                        {getStatusBadge(assets.promptStatus)}
                     </div>
 
-                    {/* Prompt Preview (Adaptive Height) */}
-                    <div className="flex-1 min-h-0 flex flex-col mb-3">
+                    <div className="space-y-3">
+                        {/* Compact Prompt View */}
                         <div
                             onClick={() => setIsPromptModalOpen(true)}
-                            className="flex-1 bg-white/5 rounded-lg p-2.5 text-gray-300 text-xs leading-relaxed overflow-hidden cursor-pointer hover:bg-white/10 transition-colors"
+                            className="bg-white/5 rounded-lg px-3 py-2 text-xs text-gray-400 cursor-pointer hover:bg-white/10 transition-colors truncate border border-transparent hover:border-white/10"
+                            title={editedPrompt}
                         >
                             {assets.promptStatus === 'loading' ? (
-                                <span className="flex items-center gap-2 text-gray-400">
-                                    <Spinner size="sm" /> 生成中...
-                                </span>
+                                <span className="flex items-center gap-2"><Spinner size="sm" /> 生成 Prompt...</span>
                             ) : (
-                                editedPrompt || <span className="text-gray-500 italic">點擊編輯 Prompt...</span>
+                                editedPrompt || '點擊編輯 Prompt...'
                             )}
                         </div>
-                    </div>
 
-                    {/* Image Buttons */}
-                    <div className="space-y-2 mt-auto">
-
-                        <Button
-                            variant="primary"
-                            size="sm"
-                            className="w-full"
-                            onClick={onGenerateImage}
-                            disabled={!assets.imagePrompt || assets.imageStatus === 'loading'}
-                        >
-                            {assets.imageStatus === 'loading' ? (
-                                <><Spinner size="sm" /> 生成中...</>
-                            ) : (
-                                assets.imageUrl ? '🔄 重新生成圖片' : '🖼️ 生成圖片'
-                            )}
-                        </Button>
-                    </div>
-
-
-                </div>
-
-                {/* Right Column: Audio Config */}
-                <div className="flex-1 flex flex-col p-4 overflow-y-auto">
-                    <div className="flex items-center justify-between mb-2">
-                        <label className="text-xs font-medium text-gray-400">🔊 語音設定</label>
-                        {getStatusBadge(assets.audioStatus)}
-                    </div>
-
-                    {/* Speed Control */}
-                    <div className="mb-3">
-                        <label className="block text-xs text-gray-500 mb-1">語速 (Speed): {assets.voiceSpeed || 1.2}</label>
-                        <input
-                            type="range"
-                            min="0.5"
-                            max="2.0"
-                            step="0.1"
-                            value={assets.voiceSpeed || 1.2}
-                            onChange={(e) => onUpdateVoiceSettings('voiceSpeed', parseFloat(e.target.value))}
-                            className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-indigo-500"
-                        />
-                    </div>
-
-                    {/* Emotion Control */}
-                    <div className="mb-3">
-                        <label className="block text-xs text-gray-500 mb-1">情緒 (Emotion)</label>
-                        <select
-                            value={assets.voiceEmotion || 'neutral'}
-                            onChange={(e) => onUpdateVoiceSettings('voiceEmotion', e.target.value)}
-                            className="w-full bg-white/5 border border-white/20 rounded-lg px-2 py-1.5 text-white text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
-                        >
-                            <option value="neutral">😐 Neutral (中性)</option>
-                            <option value="happy">😊 Happy (開心)</option>
-                            <option value="sad">😢 Sad (悲傷)</option>
-                            <option value="angry">😠 Angry (憤怒)</option>
-                            <option value="fearful">😰 Fearful (恐懼)</option>
-                            <option value="surprised">😲 Surprised (驚訝)</option>
-                        </select>
-                    </div>
-
-
-                    {/* Audio Generate & Preview */}
-                    <div className="mt-auto space-y-2">
-                        <Button
-                            variant="primary"
-                            size="sm"
-                            className="w-full"
-                            onClick={() => onGenerateAudio()}
-                            disabled={assets.audioStatus === 'loading'}
-                        >
-                            {assets.audioStatus === 'loading' ? (
-                                <><Spinner size="sm" /> 生成中...</>
-                            ) : (
-                                assets.audioUrl ? '🔄 重新生成語音' : '🔊 生成語音'
-                            )}
-                        </Button>
-                        {assets.audioUrl && (
-                            <button
-                                onClick={handlePlayAudio}
-                                className="w-full py-2 bg-white/5 hover:bg-white/10 rounded-lg text-sm text-white transition-colors"
-                            >
-                                {isAudioPlaying ? '⏸️ 暫停' : '▶️ 播放語音'}
-                            </button>
-                        )}
-
-                        {/* Global Pronunciation Fix Section */}
-                        <div className="mt-4 pt-4 border-t border-white/10">
-                            <label className="block text-xs font-medium text-gray-400 mb-2">📖 發音修正（同步至 Google Sheet）</label>
-
-                            {/* Word Input */}
-                            <div className="flex gap-1 mb-2">
-                                <input
-                                    type="text"
-                                    placeholder="輸入字詞"
-                                    value={globalDictWord}
-                                    onChange={(e) => setGlobalDictWord(e.target.value)}
-                                    className="flex-1 bg-white/5 border border-white/20 rounded px-2 py-1.5 text-white text-xs placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
-                                />
-                                <button
-                                    onClick={handleCheckAndGeneratePinyin}
-                                    disabled={isCheckingWord || isGeneratingPinyin || !globalDictWord.trim()}
-                                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                                >
-                                    {isCheckingWord || isGeneratingPinyin ? (
-                                        <><Spinner size="sm" /> 處理中...</>
-                                    ) : (
-                                        '✨ AI 生成'
-                                    )}
-                                </button>
-                            </div>
-
-                            {/* Pinyin Result & Add Button */}
-                            {globalDictPinyin && (
-                                <div className="mb-2 p-2 bg-white/5 rounded border border-white/10">
-                                    <label className="block text-[10px] text-gray-500 mb-1">拼音結果（可編輯）</label>
-                                    <div className="flex gap-1">
-                                        <input
-                                            type="text"
-                                            value={globalDictPinyin}
-                                            onChange={(e) => setGlobalDictPinyin(e.target.value)}
-                                            className="flex-1 bg-black/20 border border-white/10 rounded px-2 py-1.5 text-white text-xs font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
-                                        />
-                                        <button
-                                            onClick={handleAddToPending}
-                                            className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs rounded transition-colors whitespace-nowrap"
-                                        >
-                                            ➕ 加入清單
-                                        </button>
-                                    </div>
-                                    {globalDictRowIndex && (
-                                        <p className="text-[10px] text-yellow-500 mt-1">⚠️ 此字詞已存在，將覆蓋舊發音</p>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* Pending List */}
-                            {pendingEntries.length > 0 && (
-                                <div className="mb-3 space-y-1">
-                                    <div className="flex items-center justify-between text-[10px] text-gray-400 px-1">
-                                        <span>待處理清單 ({pendingEntries.length})</span>
-                                        <button
-                                            onClick={() => setPendingEntries([])}
-                                            className="text-red-400 hover:text-red-300"
-                                        >
-                                            清空
-                                        </button>
-                                    </div>
-                                    <div className="max-h-32 overflow-y-auto space-y-1 custom-scrollbar">
-                                        {pendingEntries.map((entry, idx) => (
-                                            <div key={`${entry.word}-${idx}`} className="flex items-center justify-between bg-white/5 px-2 py-1.5 rounded border border-white/10 group">
-                                                <div className="flex flex-col min-w-0">
-                                                    <span className="text-xs text-white truncate">{entry.word}</span>
-                                                    <span className="text-[10px] text-gray-500 font-mono truncate">{entry.pinyin}</span>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    {entry.rowIndex && <span className="text-[10px] text-yellow-500" title="覆蓋">⚠️</span>}
-                                                    <button
-                                                        onClick={() => handleRemovePending(idx)}
-                                                        className="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                    >
-                                                        🗑️
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Batch Save Button */}
+                        {/* Image Actions */}
+                        <div className="flex gap-2">
                             <Button
-                                variant="secondary"
+                                variant={assets.imagePrompt ? 'secondary' : 'primary'}
                                 size="sm"
-                                className="w-full"
-                                onClick={handleBatchSave}
-                                disabled={isSavingDict || pendingEntries.length === 0}
+                                onClick={onGeneratePrompt}
+                                disabled={assets.promptStatus === 'loading'}
+                                className="flex-1 text-xs"
+                                title="AI 自動生成 Prompt"
                             >
-                                {isSavingDict ? (
-                                    <><Spinner size="sm" /> 保存中...</>
+                                {assets.promptStatus === 'loading' ? (
+                                    <><Spinner size="sm" /> 生成中...</>
                                 ) : (
-                                    `📤 保存全部 (${pendingEntries.length}) 並重新生成語音`
+                                    assets.imagePrompt ? (
+                                        <>🔄 重新生成 Prompt</>
+                                    ) : (
+                                        <>✨ 生成 Prompt</>
+                                    )
                                 )}
                             </Button>
 
-                            {/* Status Message */}
-                            {dictSyncMessage && (
-                                <p className={`text-[10px] mt-1 ${dictSyncMessage.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>
-                                    {dictSyncMessage.text}
-                                </p>
-                            )}
+                            <Button
+                                variant="primary"
+                                size="sm"
+                                className="flex-1"
+                                onClick={onGenerateImage}
+                                disabled={!assets.imagePrompt || assets.imageStatus === 'loading'}
+                            >
+                                {assets.imageStatus === 'loading' ? (
+                                    <><Spinner size="sm" /> 繪製中...</>
+                                ) : (
+                                    assets.imageUrl ? '🔄 重新生成圖片' : '🖼️ 生成圖片'
+                                )}
+                            </Button>
                         </div>
+                    </div>
+                </div>
+
+                {/* Right Column: Audio Config (Redesigned) */}
+                <div className="flex-1 flex flex-col p-4 overflow-y-auto bg-black/10">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                            <label className="text-xs font-medium text-gray-400">🔊 語音設定</label>
+                            {getStatusBadge(assets.audioStatus)}
+                        </div>
+                        {/* New Popover for Settings & Regenerate */}
+                        <VoiceSettingsPopover
+                            speed={assets.voiceSpeed || 1.2}
+                            emotion={assets.voiceEmotion || 'neutral'}
+                            onSpeedChange={(v) => onUpdateVoiceSettings('voiceSpeed', v)}
+                            onEmotionChange={(v) => onUpdateVoiceSettings('voiceEmotion', v)}
+                            onRegenerate={() => onGenerateAudio()}
+                            isRegenerating={assets.audioStatus === 'loading'}
+                        />
+                    </div>
+
+                    {/* Dictionary Section (Prominent) */}
+                    <div className="flex-1">
+                        <label className="block text-xs font-medium text-gray-400 mb-2">📖 發音字典（同步雲端）</label>
+
+                        {/* Word Input */}
+                        <div className="flex gap-1 mb-2">
+                            <input
+                                type="text"
+                                placeholder="輸入字詞"
+                                value={globalDictWord}
+                                onChange={(e) => setGlobalDictWord(e.target.value)}
+                                className="flex-1 bg-white/5 border border-white/20 rounded px-2 py-1.5 text-white text-xs placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
+                            />
+                            <Button
+                                size="sm"
+                                onClick={handleCheckAndGeneratePinyin}
+                                disabled={isCheckingWord || isGeneratingPinyin || !globalDictWord.trim()}
+                                className="whitespace-nowrap"
+                            >
+                                {isCheckingWord || isGeneratingPinyin ? (
+                                    <Spinner size="sm" />
+                                ) : (
+                                    '✨ AI'
+                                )}
+                            </Button>
+                        </div>
+
+                        {/* Pinyin Result & Add */}
+                        {globalDictPinyin && (
+                            <div className="mb-3 p-2 bg-white/5 rounded border border-white/10 animate-in fade-in slide-in-from-top-1">
+                                <label className="block text-[10px] text-gray-500 mb-1">拼音結果</label>
+                                <div className="flex gap-1 mb-1">
+                                    <input
+                                        type="text"
+                                        value={globalDictPinyin}
+                                        onChange={(e) => setGlobalDictPinyin(e.target.value)}
+                                        className="flex-1 bg-black/20 border border-white/10 rounded px-2 py-1.5 text-white text-xs font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
+                                    />
+                                </div>
+                                <Button
+                                    variant="primary"
+                                    size="sm"
+                                    onClick={handleAddToPending}
+                                    className="w-full bg-green-600 hover:bg-green-700 from-transparent to-transparent shadow-none border-0"
+                                >
+                                    ➕ 加入待處理清單
+                                </Button>
+                                {globalDictRowIndex && (
+                                    <p className="text-[10px] text-yellow-500 mt-1 text-center">⚠️ 將覆蓋舊發音</p>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Pending List */}
+                        {pendingEntries.length > 0 && (
+                            <div className="mb-3">
+                                <div className="flex items-center justify-between text-[10px] text-gray-400 px-1 mb-1">
+                                    <span>待處理 ({pendingEntries.length})</span>
+                                    <Button
+                                        variant="link"
+                                        size="sm"
+                                        onClick={() => setPendingEntries([])}
+                                        className="text-red-400 hover:text-red-300 h-auto p-0"
+                                    >
+                                        清空
+                                    </Button>
+                                </div>
+                                <div className="max-h-32 overflow-y-auto space-y-1 custom-scrollbar pr-1">
+                                    {pendingEntries.map((entry, idx) => (
+                                        <div key={`${entry.word}-${idx}`} className="flex items-center justify-between bg-white/5 px-2 py-1.5 rounded border border-white/10 group hover:border-white/20 transition-colors">
+                                            <div className="flex flex-col min-w-0">
+                                                <span className="text-xs text-white truncate">{entry.word}</span>
+                                                <span className="text-[10px] text-gray-500 font-mono truncate">{entry.pinyin}</span>
+                                            </div>
+                                            <IconButton
+                                                icon="🗑️"
+                                                variant="danger"
+                                                size="sm"
+                                                onClick={() => handleRemovePending(idx)}
+                                                className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                                {/* Batch Save Button */}
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    className="w-full mt-2"
+                                    onClick={handleBatchSave}
+                                    disabled={isSavingDict}
+                                >
+                                    {isSavingDict ? (
+                                        <><Spinner size="sm" /> 保存中...</>
+                                    ) : (
+                                        `📥 保存並重成語音`
+                                    )}
+                                </Button>
+                            </div>
+                        )}
+
+                        {/* Status Message */}
+                        {dictSyncMessage && (
+                            <div className={`text-[10px] p-2 rounded ${dictSyncMessage.type === 'success' ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+                                {dictSyncMessage.text}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

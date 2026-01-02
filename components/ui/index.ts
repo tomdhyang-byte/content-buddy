@@ -5,3 +5,5 @@ export { Modal, ConfirmModal } from './Modal';
 export { Spinner, Skeleton, SegmentSkeleton, ImageSkeleton } from './Spinner';
 export { AudioPlayer } from './AudioPlayer';
 export { EditModal } from './EditModal';
+export { VoiceSettingsPopover } from './VoiceSettingsPopover';
+export { IconButton } from './IconButton';
