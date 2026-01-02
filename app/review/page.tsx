@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useProject } from '@/context/ProjectContext';
 import { Button, ConfirmModal } from '@/components/ui';
+import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from 'react-resizable-panels';
 import {
     TimelineContainer,
     ConfigPanel,
@@ -409,71 +410,80 @@ export default function ReviewPage() {
 
             {/* Main Content - Quadrant Layout */}
             <div className="flex-1 min-h-0 flex flex-col gap-4 p-4 overflow-hidden">
-                {/* Top Row: Preview + Config (Equal Heights) */}
-                <div className="flex-1 min-h-0 flex gap-4">
-                    {/* Left: Preview Player (16:9 handled internally by PreviewPlayer) */}
-                    <div className="flex-[1.5] min-w-0 relative">
-                        <PreviewPlayer
-                            segments={timelineSegments}
-                            isPlaying={isPlaying}
-                            currentTime={currentPlayTime}
-                            onPlayStateChange={setIsPlaying}
-                            onTimeUpdate={setCurrentPlayTime}
-                            onPlayComplete={() => setIsPlaying(false)}
-                            onBatchGenerate={handleBatchGenerate}
-                            isBatchGenerating={isBatchGenerating}
-                            onSegmentChange={setSelectedSegmentId}
-                            playbackRate={state.playbackRate}
-                        />
+                {/* Top Row: Preview + Config (Resizable) */}
+                <PanelGroup className="flex-1 min-h-0">
+                    {/* Left: Preview Player */}
+                    <Panel defaultSize={60} minSize="30">
+                        <div className="h-full relative overflow-hidden">
+                            <PreviewPlayer
+                                segments={timelineSegments}
+                                isPlaying={isPlaying}
+                                currentTime={currentPlayTime}
+                                onPlayStateChange={setIsPlaying}
+                                onTimeUpdate={setCurrentPlayTime}
+                                onPlayComplete={() => setIsPlaying(false)}
+                                onBatchGenerate={handleBatchGenerate}
+                                isBatchGenerating={isBatchGenerating}
+                                onSegmentChange={setSelectedSegmentId}
+                                playbackRate={state.playbackRate}
+                            />
 
-                        {/* Speed Control Overlay (Bottom Right of Preview Area) */}
-                        <div className="absolute bottom-4 right-4 z-10">
-                            <button
-                                onClick={togglePlaybackRate}
-                                className="bg-black/60 hover:bg-black/80 backdrop-blur-md text-white text-xs font-medium px-3 py-1.5 rounded-full border border-white/10 transition-all flex items-center gap-1"
-                                title="調整播放倍速"
-                            >
-                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                </svg>
-                                {state.playbackRate}x
-                            </button>
+                            {/* Speed Control Overlay (Bottom Right of Preview Area) */}
+                            <div className="absolute bottom-4 right-4 z-10">
+                                <button
+                                    onClick={togglePlaybackRate}
+                                    className="bg-black/60 hover:bg-black/80 backdrop-blur-md text-white text-xs font-medium px-3 py-1.5 rounded-full border border-white/10 transition-all flex items-center gap-1"
+                                    title="調整播放倍速"
+                                >
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                    </svg>
+                                    {state.playbackRate}x
+                                </button>
+                            </div>
                         </div>
-                    </div>
+                    </Panel>
+
+                    {/* Resizable Handle */}
+                    <PanelResizeHandle className="w-2 mx-1 flex items-center justify-center bg-transparent hover:bg-white/5 transition-colors cursor-col-resize group rounded-md outline-none focus-visible:ring-1 focus-visible:ring-indigo-500">
+                        <div className="w-1 h-8 rounded-full bg-white/10 group-hover:bg-indigo-500/50 transition-colors" />
+                    </PanelResizeHandle>
 
                     {/* Right: Config Panel */}
-                    <div className="flex-1 min-w-[320px]">
-                        <ConfigPanel
-                            segmentId={selectedSegmentId}
-                            segmentIndex={selectedSegmentIndex}
-                            segmentText={selectedSegment?.text || ''}
-                            assets={selectedAssets}
-                            onTextChange={(text) => {
-                                if (selectedSegmentId) {
-                                    updateSegmentText(selectedSegmentId, text);
-                                }
-                            }}
-                            onPromptChange={handlePromptChange}
-                            onGeneratePrompt={() => {
-                                if (selectedSegmentId && selectedSegment) {
-                                    generatePromptForSegment(selectedSegmentId, selectedSegment.text);
-                                }
-                            }}
-                            onGenerateImage={handleGenerateImage}
-                            onGenerateAudio={handleGenerateAudio}
-                            onUpdateDictionary={(items: PronunciationDictItem[]) => {
-                                if (selectedSegmentId) {
-                                    updateAssetStatus(selectedSegmentId, 'customPronunciations', items);
-                                }
-                            }}
-                            onUpdateVoiceSettings={(key: 'voiceSpeed' | 'voiceEmotion', value: number | string) => {
-                                if (selectedSegmentId) {
-                                    updateAssetStatus(selectedSegmentId, key, value);
-                                }
-                            }}
-                        />
-                    </div>
-                </div>
+                    <Panel defaultSize={40} minSize="25">
+                        <div className="h-full min-w-[320px]">
+                            <ConfigPanel
+                                segmentId={selectedSegmentId}
+                                segmentIndex={selectedSegmentIndex}
+                                segmentText={selectedSegment?.text || ''}
+                                assets={selectedAssets}
+                                onTextChange={(text) => {
+                                    if (selectedSegmentId) {
+                                        updateSegmentText(selectedSegmentId, text);
+                                    }
+                                }}
+                                onPromptChange={handlePromptChange}
+                                onGeneratePrompt={() => {
+                                    if (selectedSegmentId && selectedSegment) {
+                                        generatePromptForSegment(selectedSegmentId, selectedSegment.text);
+                                    }
+                                }}
+                                onGenerateImage={handleGenerateImage}
+                                onGenerateAudio={handleGenerateAudio}
+                                onUpdateDictionary={(items: PronunciationDictItem[]) => {
+                                    if (selectedSegmentId) {
+                                        updateAssetStatus(selectedSegmentId, 'customPronunciations', items);
+                                    }
+                                }}
+                                onUpdateVoiceSettings={(key: 'voiceSpeed' | 'voiceEmotion', value: number | string) => {
+                                    if (selectedSegmentId) {
+                                        updateAssetStatus(selectedSegmentId, key, value);
+                                    }
+                                }}
+                            />
+                        </div>
+                    </Panel>
+                </PanelGroup>
 
                 {/* Bottom Row: Timeline (Full Width, Fixed Height) */}
                 <div className="h-[220px] flex-shrink-0 flex flex-col">
