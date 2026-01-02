@@ -1,9 +1,18 @@
 import { NextResponse } from 'next/server';
-import { saveWord } from '@/lib/google-sheets';
+import { saveWord, saveWords } from '@/lib/google-sheets';
 
 export async function POST(request: Request) {
     try {
-        const { word, pinyin, rowIndex } = await request.json();
+        const body = await request.json();
+
+        // Handle batch save
+        if (body.entries && Array.isArray(body.entries)) {
+            await saveWords(body.entries);
+            return NextResponse.json({ success: true, savedCount: body.entries.length });
+        }
+
+        // Handle single save (backward compatibility)
+        const { word, pinyin, rowIndex } = body;
 
         if (!word || typeof word !== 'string') {
             return NextResponse.json(

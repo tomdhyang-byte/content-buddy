@@ -81,6 +81,52 @@ export async function saveWord(word: string, pinyin: string, rowIndex?: number):
 }
 
 /**
+ * Batch save words to the dictionary (append or update)
+ */
+export async function saveWords(entries: Array<{ word: string; pinyin: string; rowIndex?: number }>): Promise<void> {
+    const sheets = getGoogleSheetsClient();
+    const newEntries: Array<string[]> = [];
+    const updatePromises: Array<Promise<any>> = [];
+
+    // Separate updates and new entries
+    for (const entry of entries) {
+        if (entry.rowIndex) {
+            // Collect update promises
+            updatePromises.push(
+                sheets.spreadsheets.values.update({
+                    spreadsheetId: SHEET_ID,
+                    range: `'${SHEET_NAME}'!A${entry.rowIndex}:B${entry.rowIndex}`,
+                    valueInputOption: 'RAW',
+                    requestBody: {
+                        values: [[entry.word, entry.pinyin]],
+                    },
+                })
+            );
+        } else {
+            // Collect new entries for bulk append
+            newEntries.push([entry.word, entry.pinyin]);
+        }
+    }
+
+    // Execute all updates in parallel
+    if (updatePromises.length > 0) {
+        await Promise.all(updatePromises);
+    }
+
+    // Execute bulk append if there are new entries
+    if (newEntries.length > 0) {
+        await sheets.spreadsheets.values.append({
+            spreadsheetId: SHEET_ID,
+            range: `'${SHEET_NAME}'!A:B`,
+            valueInputOption: 'RAW',
+            requestBody: {
+                values: newEntries,
+            },
+        });
+    }
+}
+
+/**
  * Get all dictionary entries and format for MiniMax
  * Returns the pronunciation_dict format
  */

@@ -1,17 +1,17 @@
 import { STYLE_LIBRARY } from './styles';
 
 export const PROMPT_CONFIG = {
-    // Common Model Settings
-    models: {
-        slicing: 'gpt-5.1',
-        imagePrompt: 'gpt-5.2',
-        imageGeneration: 'gemini-3-pro-image-preview', //gemini-2.5-flash-image
-        audioGeneration: 'speech-2.6-hd',
-    },
+  // Common Model Settings
+  models: {
+    slicing: 'gpt-5.1',
+    imagePrompt: 'gpt-5.1',
+    imageGeneration: 'gemini-2.5-flash-image', //gemini-3-pro-image-preview
+    audioGeneration: 'speech-2.6-hd',
+  },
 
-    // Step 2: Slicing Prompts
-    slicing: {
-        system: `# Role (Context)
+  // Step 2: Slicing Prompts
+  slicing: {
+    system: `# Role (Context)
 You are an expert AI Video Director and Editor specializing in "Visual Pacing" and "Semantic Segmentation". Your expertise lies in converting long-form speech into engaging, visually coherent segments for AI video generation. You understand audience psychology and know exactly when to cut a scene to maintain engagement without disrupting the narrative flow.
 
 # Task
@@ -42,12 +42,12 @@ Return a pure JSON object with the following schema:
 3. Read through the text, identifying semantic breaks (periods, commas, topic shifts) that align with the calculated pacing.
 4. Verify that no text has been changed.
 5. Generate the JSON.`,
-        temperature: 1.0,
-    },
+    temperature: 1.0,
+  },
 
-    // Step 3: Image Prompt Generation Prompts
-    imageGeneration: {
-        system: (styleModifier: string) => `Role
+  // Step 3: Image Prompt Generation Prompts
+  imageGeneration: {
+    system: (styleModifier: string) => `Role
 You are a prompt engineer for Nano Banana image generation. Your job is to produce ONE final image-generation prompt that will be executed directly in Nano Banana to create a single 16:9 image for a Youtube video script slice.
 Inputs
 STYLE_SPEC (verbatim): ${styleModifier}
@@ -84,10 +84,10 @@ Does it directly visualize SLICED_SCRIPT (not a random infographic)?
 Would a viewer understand the main idea in 3 seconds?
 Is the on-image text short and readable?
 Now produce the final Nano Banana image prompt.`,
-        temperature: 0.7,
+    temperature: 1.0,
 
-        // Style Modifiers mapped to dropdown values
-        // Style Modifiers mapped to dropdown values (Generated from STYLE_LIBRARY)
-        styles: Object.fromEntries(STYLE_LIBRARY.map(s => [s.id, s.promptSpec])) as Record<string, string>,
-    },
+    // Style Modifiers mapped to dropdown values
+    // Style Modifiers mapped to dropdown values (Generated from STYLE_LIBRARY)
+    styles: Object.fromEntries(STYLE_LIBRARY.map(s => [s.id, s.promptSpec])) as Record<string, string>,
+  },
 };

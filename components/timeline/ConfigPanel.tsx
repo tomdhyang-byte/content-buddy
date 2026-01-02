@@ -51,6 +51,15 @@ export function ConfigPanel({
     const [showOverwriteConfirm, setShowOverwriteConfirm] = useState(false);
     const [dictSyncMessage, setDictSyncMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+    // Pending entries for batch save
+    interface PendingDictEntry {
+        word: string;
+        pinyin: string;
+        rowIndex: number | null;
+        isExisting: boolean;
+    }
+    const [pendingEntries, setPendingEntries] = useState<PendingDictEntry[]>([]);
+
     // Sync prompt from assets
     useEffect(() => {
         if (assets?.imagePrompt) {
@@ -188,21 +197,53 @@ export function ConfigPanel({
         await generatePinyinForWord();
     };
 
-    const handleSaveToSheetAndRegenerate = async () => {
+    const handleAddToPending = () => {
         if (!globalDictWord.trim() || !globalDictPinyin.trim()) return;
+
+        const newEntry: PendingDictEntry = {
+            word: globalDictWord.trim(),
+            pinyin: globalDictPinyin.trim(),
+            rowIndex: globalDictRowIndex,
+            isExisting: !!globalDictRowIndex,
+        };
+
+        // Check if word already in pending, update if so
+        const existingIdx = pendingEntries.findIndex(e => e.word === newEntry.word);
+        if (existingIdx >= 0) {
+            const newPending = [...pendingEntries];
+            newPending[existingIdx] = newEntry;
+            setPendingEntries(newPending);
+        } else {
+            setPendingEntries([...pendingEntries, newEntry]);
+        }
+
+        // Clear inputs
+        setGlobalDictWord('');
+        setGlobalDictPinyin('');
+        setGlobalDictRowIndex(null);
+    };
+
+    const handleRemovePending = (index: number) => {
+        setPendingEntries(pendingEntries.filter((_, i) => i !== index));
+    };
+
+    const handleBatchSave = async () => {
+        if (pendingEntries.length === 0) return;
 
         setIsSavingDict(true);
         setDictSyncMessage(null);
 
         try {
-            // Save to Google Sheet
+            // Batch Save to Google Sheet
             const saveRes = await fetch('/api/dictionary/save', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    word: globalDictWord.trim(),
-                    pinyin: globalDictPinyin.trim(),
-                    rowIndex: globalDictRowIndex,
+                    entries: pendingEntries.map(e => ({
+                        word: e.word,
+                        pinyin: e.pinyin,
+                        rowIndex: e.rowIndex
+                    }))
                 }),
             });
 
@@ -210,28 +251,31 @@ export function ConfigPanel({
                 throw new Error('Failed to save');
             }
 
-            // Add to local dictionary for current segment
-            const currentItems = assets?.customPronunciations || [];
-            const existingIndex = currentItems.findIndex(item => item.text === globalDictWord.trim());
-            if (existingIndex >= 0) {
-                currentItems[existingIndex].pronunciation = globalDictPinyin.trim();
-                onUpdateDictionary([...currentItems]);
-            } else {
-                onUpdateDictionary([...currentItems, { text: globalDictWord.trim(), pronunciation: globalDictPinyin.trim() }]);
-            }
+            const data = await saveRes.json();
 
-            setDictSyncMessage({ type: 'success', text: '已保存至 Google Sheet！' });
+            // Update local dictionary for current segment
+            // We need to merge all new entries into the current segment's pronunciations
+            const currentItems = [...(assets?.customPronunciations || [])];
 
-            // Trigger audio regeneration with the updated dictionary
-            const updatedDict = existingIndex >= 0
-                ? currentItems
-                : [...currentItems, { text: globalDictWord.trim(), pronunciation: globalDictPinyin.trim() }];
-            onGenerateAudio(updatedDict);
+            pendingEntries.forEach(entry => {
+                const existingIndex = currentItems.findIndex(item => item.text === entry.word);
+                if (existingIndex >= 0) {
+                    currentItems[existingIndex].pronunciation = entry.pinyin;
+                } else {
+                    currentItems.push({ text: entry.word, pronunciation: entry.pinyin });
+                }
+            });
 
-            // Clear inputs
-            setGlobalDictWord('');
-            setGlobalDictPinyin('');
-            setGlobalDictRowIndex(null);
+            onUpdateDictionary(currentItems);
+
+            setDictSyncMessage({ type: 'success', text: `成功保存 ${pendingEntries.length} 筆資料！` });
+
+            // Trigger audio regeneration ONLY ONCE with the updated dictionary
+            // Call without args to force fetching fresh global dictionary
+            onGenerateAudio();
+
+            // Clear pending list
+            setPendingEntries([]);
         } catch (error) {
             setDictSyncMessage({ type: 'error', text: '保存失敗' });
         } finally {
@@ -449,35 +493,78 @@ export function ConfigPanel({
                                 </button>
                             </div>
 
-                            {/* Pinyin Result */}
+                            {/* Pinyin Result & Add Button */}
                             {globalDictPinyin && (
-                                <div className="mb-2">
+                                <div className="mb-2 p-2 bg-white/5 rounded border border-white/10">
                                     <label className="block text-[10px] text-gray-500 mb-1">拼音結果（可編輯）</label>
-                                    <input
-                                        type="text"
-                                        value={globalDictPinyin}
-                                        onChange={(e) => setGlobalDictPinyin(e.target.value)}
-                                        className="w-full bg-white/5 border border-white/20 rounded px-2 py-1.5 text-white text-xs font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
-                                    />
+                                    <div className="flex gap-1">
+                                        <input
+                                            type="text"
+                                            value={globalDictPinyin}
+                                            onChange={(e) => setGlobalDictPinyin(e.target.value)}
+                                            className="flex-1 bg-black/20 border border-white/10 rounded px-2 py-1.5 text-white text-xs font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
+                                        />
+                                        <button
+                                            onClick={handleAddToPending}
+                                            className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs rounded transition-colors whitespace-nowrap"
+                                        >
+                                            ➕ 加入清單
+                                        </button>
+                                    </div>
+                                    {globalDictRowIndex && (
+                                        <p className="text-[10px] text-yellow-500 mt-1">⚠️ 此字詞已存在，將覆蓋舊發音</p>
+                                    )}
                                 </div>
                             )}
 
-                            {/* Save Button */}
-                            {globalDictPinyin && (
-                                <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    className="w-full"
-                                    onClick={handleSaveToSheetAndRegenerate}
-                                    disabled={isSavingDict}
-                                >
-                                    {isSavingDict ? (
-                                        <><Spinner size="sm" /> 保存中...</>
-                                    ) : (
-                                        '📤 保存至 Sheet 並重新生成語音'
-                                    )}
-                                </Button>
+                            {/* Pending List */}
+                            {pendingEntries.length > 0 && (
+                                <div className="mb-3 space-y-1">
+                                    <div className="flex items-center justify-between text-[10px] text-gray-400 px-1">
+                                        <span>待處理清單 ({pendingEntries.length})</span>
+                                        <button
+                                            onClick={() => setPendingEntries([])}
+                                            className="text-red-400 hover:text-red-300"
+                                        >
+                                            清空
+                                        </button>
+                                    </div>
+                                    <div className="max-h-32 overflow-y-auto space-y-1 custom-scrollbar">
+                                        {pendingEntries.map((entry, idx) => (
+                                            <div key={`${entry.word}-${idx}`} className="flex items-center justify-between bg-white/5 px-2 py-1.5 rounded border border-white/10 group">
+                                                <div className="flex flex-col min-w-0">
+                                                    <span className="text-xs text-white truncate">{entry.word}</span>
+                                                    <span className="text-[10px] text-gray-500 font-mono truncate">{entry.pinyin}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    {entry.rowIndex && <span className="text-[10px] text-yellow-500" title="覆蓋">⚠️</span>}
+                                                    <button
+                                                        onClick={() => handleRemovePending(idx)}
+                                                        className="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    >
+                                                        🗑️
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
                             )}
+
+                            {/* Batch Save Button */}
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                className="w-full"
+                                onClick={handleBatchSave}
+                                disabled={isSavingDict || pendingEntries.length === 0}
+                            >
+                                {isSavingDict ? (
+                                    <><Spinner size="sm" /> 保存中...</>
+                                ) : (
+                                    `📤 保存全部 (${pendingEntries.length}) 並重新生成語音`
+                                )}
+                            </Button>
 
                             {/* Status Message */}
                             {dictSyncMessage && (
